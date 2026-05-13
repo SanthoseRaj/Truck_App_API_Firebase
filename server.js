@@ -87,9 +87,10 @@ const startServer = async () => {
   try {
     await connectDB();
     await seedUsers();
-    app.listen(PORT, () => {
-      console.log(`Server URL: http://localhost:${PORT}`);
-      console.log(`Swagger URL: http://localhost:${PORT}/api-docs`);
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`Swagger URL: /api-docs`);
     });
   } catch (error) {
     console.error(`Failed to start server: ${error.message}`);
