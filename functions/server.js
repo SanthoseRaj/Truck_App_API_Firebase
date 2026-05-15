@@ -87,21 +87,35 @@ app.use('/api/public', publicRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-const startServer = async () => {
-  try {
-    await connectDB();
+// const startServer = async () => {
+//   try {
+//     await connectDB();
+//     await ensureShipIndexes();
+//     await ensureDriverIndexes();
+//     await seedUsers();
+
+//     app.listen(PORT, '0.0.0.0', () => {
+//       console.log(`Server running on port ${PORT}`);
+//       console.log(`Swagger URL: /api-docs`);
+//     });
+//   } catch (error) {
+//     console.error(`Failed to start server: ${error.message}`);
+//     process.exit(1);
+//   }
+// };
+
+// startServer();
+
+
+connectDB()
+  .then(async () => {
     await ensureShipIndexes();
     await ensureDriverIndexes();
     await seedUsers();
+    console.log('Firebase Function database connected');
+  })
+  .catch((error) => {
+    console.error(`Database connection failed: ${error.message}`);
+  });
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Swagger URL: /api-docs`);
-    });
-  } catch (error) {
-    console.error(`Failed to start server: ${error.message}`);
-    process.exit(1);
-  }
-};
-
-startServer();
+module.exports = app;
