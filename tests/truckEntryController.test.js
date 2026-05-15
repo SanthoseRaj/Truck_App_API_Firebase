@@ -1,5 +1,8 @@
 const assert = require('assert');
+const Ship = require('../models/Ship');
+const TruckEntry = require('../models/TruckEntry');
 const {
+  createTruckEntry,
   getWorkflowState,
   resolveEntryDestinationUpdate,
   resolveOriginStopForDestination,
@@ -35,7 +38,7 @@ const yardOrigin = {
 const gateOrigin = {
   ...baseEntry,
   _id: 'entry-2',
-  destination: 'freeZone',
+  destination: 'freezone',
   originStop: 'gate',
   updates: [{ stop: 'gate', status: 'entry', updatedAt: at(0), teamName: 'Gate Team', memberName: 'Gate Member' }],
 };
@@ -77,8 +80,8 @@ assert.strictEqual(getWorkflowState(completedGateOrigin).workflowStatus, 'comple
 const serializedGateOrigin = serializeTruckEntry(gateOrigin);
 const serializedLegacyFreeZone = serializeTruckEntry({ ...gateOrigin, destination: 'Free Zone' });
 
-assert.strictEqual(serializedGateOrigin.destination, 'freeZone');
-assert.strictEqual(serializedLegacyFreeZone.destination, 'freeZone');
+assert.strictEqual(serializedGateOrigin.destination, 'freezone');
+assert.strictEqual(serializedLegacyFreeZone.destination, 'freezone');
 assert.strictEqual(serializedGateOrigin.originStop, 'gate');
 assert.strictEqual(serializedGateOrigin.currentStop, 'gate');
 assert.strictEqual(serializedGateOrigin.currentStatus, 'entry');
@@ -88,23 +91,23 @@ assert.strictEqual(serializedGateOrigin.nextStop, 'port');
 
 assert.strictEqual(validateOriginCycle('yard', null), null);
 assert.strictEqual(validateOriginCycle('yard', { destination: 'dubai' }), null);
-assert.strictEqual(validateOriginCycle('gate', { destination: 'freeZone' }), null);
-assert.match(validateOriginCycle('gate', null), /freeZone/);
-assert.match(validateOriginCycle('gate', { destination: 'dubai' }), /freeZone/);
-assert.match(validateOriginCycle('yard', { destination: 'freeZone' }), /dubai/);
+assert.match(validateOriginCycle('yard', { destination: 'freezone' }), /Gate/);
+assert.strictEqual(validateOriginCycle('gate', null), null);
+assert.match(validateOriginCycle('gate', { destination: 'dubai' }), /Yard/);
+assert.strictEqual(validateOriginCycle('gate', { destination: 'freezone' }), null);
 assert.strictEqual(validateOriginCycle('gate', { destination: 'free_zone' }), null);
 
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: 'dubai' }, {}), {
   destination: 'dubai',
 });
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: 'freezone' }, {}), {
-  destination: 'freeZone',
+  destination: 'freezone',
 });
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: 'Free Zone' }, { destination: 'free_zone' }), {
-  destination: 'freeZone',
+  destination: 'freezone',
 });
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, { destination: 'freeZone' }), {
-  destination: 'freeZone',
+  destination: 'freezone',
 });
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, {}), {
   error: { status: 400, message: 'Dubai or Free Zone destination is required' },
@@ -114,7 +117,7 @@ assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: 'dubai' }, {
 });
 
 assert.deepStrictEqual(resolveOriginStopForDestination('freeZone'), {
-  originStop: 'gate',
+  originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('dubai'), {
   originStop: 'yard',
@@ -126,10 +129,130 @@ assert.deepStrictEqual(resolveOriginStopForDestination('dubai', 'yard'), {
   originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('freeZone', 'yard'), {
-  error: { status: 400, message: 'Free Zone trucks must start from Gate entry' },
+  originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('dubai', 'gate'), {
-  error: { status: 400, message: 'Dubai trucks must start from Yard entry' },
+  originStop: 'gate',
+});
+assert.deepStrictEqual(resolveOriginStopForDestination('freeZone', 'YARD'), {
+  originStop: 'yard',
+});
+assert.deepStrictEqual(resolveOriginStopForDestination('FREE_ZONE', 'Gate'), {
+  originStop: 'gate',
 });
 
-console.log('truck entry controller tests passed');
+const validShipId = '507f1f77bcf86cd799439011';
+const makeCreateBody = (overrides = {}) => ({
+  headTruckNumber: 'HT-200',
+  tailTrailerNumber: 'TT-200',
+  supplierName: 'Gulf Supplier',
+  shipId: validShipId,
+  shipName: 'Gulf Star',
+  shipNumber: 'GS-1',
+  tripNumber: 'TRIP-2',
+  tripTime: 1,
+  driverName: 'Driver Two',
+  driverMobile: '971500000001',
+  driverTdCardNumber: 'TD-2',
+  truckModel: 'sixAxis',
+  destination: 'dubai',
+  originStop: 'yard',
+  ...overrides,
+});
+
+const makeCompletedEntry = (destination) => ({
+  ...baseEntry,
+  _id: `completed-${destination}`,
+  destination,
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(0) },
+    { stop: 'yard', status: 'exit', updatedAt: at(1) },
+    { stop: 'gate', status: 'entry', updatedAt: at(2) },
+    { stop: 'gate', status: 'exit', updatedAt: at(3) },
+    { stop: 'port', status: 'entry', updatedAt: at(4) },
+    { stop: 'port', status: 'exit', updatedAt: at(5) },
+    { stop: 'clearence', status: 'entry', updatedAt: at(6) },
+    { stop: 'clearence', status: 'exit', updatedAt: at(7) },
+    { stop: 'dubai', status: 'entry', updatedAt: at(8) },
+    { stop: 'dubai', status: 'exit', updatedAt: at(9) },
+  ],
+});
+
+const callCreateTruckEntry = async ({ body, entries = [] }) => {
+  const originalFindById = Ship.findById;
+  const originalFind = TruckEntry.find;
+  const originalCreate = TruckEntry.create;
+  const res = {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+  let nextError = null;
+
+  Ship.findById = async () => ({ _id: validShipId });
+  TruckEntry.find = () => ({ sort: async () => entries });
+  TruckEntry.create = async (payload) => ({ _id: 'created-entry', ...payload });
+
+  try {
+    await createTruckEntry(
+      { body, user: { role: 'yard', name: 'Yard Member', entryTeam: { name: 'Yard Entry Team' } } },
+      res,
+      (error) => {
+        nextError = error;
+      }
+    );
+  } finally {
+    Ship.findById = originalFindById;
+    TruckEntry.find = originalFind;
+    TruckEntry.create = originalCreate;
+  }
+
+  assert.strictEqual(nextError, null);
+  return res;
+};
+
+(async () => {
+  const yardFreezone = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
+  });
+
+  assert.strictEqual(yardFreezone.statusCode, 201);
+  assert.strictEqual(yardFreezone.body.truckEntry.destination, 'freezone');
+  assert.strictEqual(yardFreezone.body.truckEntry.originStop, 'yard');
+
+  const gateDubai = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'gate' }),
+  });
+
+  assert.strictEqual(gateDubai.statusCode, 201);
+  assert.strictEqual(gateDubai.body.truckEntry.destination, 'dubai');
+  assert.strictEqual(gateDubai.body.truckEntry.originStop, 'gate');
+
+  const previousDubaiGateOrigin = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'freezone', originStop: 'gate' }),
+    entries: [makeCompletedEntry('dubai')],
+  });
+
+  assert.strictEqual(previousDubaiGateOrigin.statusCode, 400);
+  assert.match(previousDubaiGateOrigin.body.message, /Yard/);
+
+  const previousFreezoneYardOrigin = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [makeCompletedEntry('freezone')],
+  });
+
+  assert.strictEqual(previousFreezoneYardOrigin.statusCode, 400);
+  assert.match(previousFreezoneYardOrigin.body.message, /Gate/);
+
+  console.log('truck entry controller tests passed');
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

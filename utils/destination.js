@@ -4,7 +4,7 @@ const normalizeDestination = (destination) => {
   const normalized = destination.toString().trim().toLowerCase().replace(/[\s_-]+/g, '');
 
   if (normalized === 'dubai') return 'dubai';
-  if (normalized === 'freezone') return 'freeZone';
+  if (normalized === 'freezone') return 'freezone';
 
   return null;
 };

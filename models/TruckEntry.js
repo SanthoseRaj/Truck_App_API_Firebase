@@ -96,7 +96,7 @@ const truckEntrySchema = new mongoose.Schema(
     },
     destination: {
       type: String,
-      enum: ['dubai', 'freeZone'],
+      enum: ['dubai', 'freezone', 'freeZone'],
       trim: true,
     },
     originStop: {

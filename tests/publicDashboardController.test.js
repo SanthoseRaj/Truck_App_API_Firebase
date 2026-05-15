@@ -208,7 +208,7 @@ assert.deepStrictEqual(buildDashboardCounts(selectedDateEntries, { dateScoped: t
 const gateOriginFreeZoneEntry = serializePublicTruckEntry({
   ...baseEntry,
   _id: 'gate-origin-free-zone',
-  destination: 'freeZone',
+  destination: 'freezone',
   originStop: 'gate',
   updates: [
     { stop: 'gate', status: 'entry', updatedAt: at(1) },
@@ -222,7 +222,7 @@ const gateOriginFreeZoneEntry = serializePublicTruckEntry({
   ],
 });
 
-assert.strictEqual(gateOriginFreeZoneEntry.destination, 'freeZone');
+assert.strictEqual(gateOriginFreeZoneEntry.destination, 'freezone');
 assert.strictEqual(gateOriginFreeZoneEntry.originStop, 'gate');
 assert.strictEqual(gateOriginFreeZoneEntry.workflowStatus, 'completed');
 assert.strictEqual(gateOriginFreeZoneEntry.currentStop, 'dubai');

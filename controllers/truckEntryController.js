@@ -74,7 +74,7 @@ const validateRequiredFields = (body) => {
   }
 
   if (!normalizeDestination(body.destination)) {
-    return 'destination must be either dubai or freeZone';
+    return 'destination must be either dubai or freezone';
   }
 
   if (!isValidOriginStop(normalizeOriginStop(body.originStop))) {
@@ -173,43 +173,35 @@ const getEntriesForTruck = (headTruckNumber, tailTrailerNumber) =>
   }).sort('-createdAt');
 
 const hasOpenTruckEntry = (entries) => entries.some((entry) => getWorkflowState(entry).workflowStatus !== 'completed');
+const getLatestCompletedEntry = (entries) =>
+  entries.find((entry) => getWorkflowState(entry).workflowStatus === 'completed') || null;
 
 const validateOriginCycle = (originStop, latestCompletedEntry) => {
   const latestDestination = normalizeDestination(latestCompletedEntry?.destination);
 
-  if (originStop === 'gate' && latestDestination !== 'freeZone') {
-    return 'Gate-origin entry requires the latest completed cycle destination to be freeZone';
+  if (latestDestination === 'dubai' && originStop !== 'yard') {
+    return 'Latest completed Dubai trip must start the next trip from Yard';
   }
 
-  if (originStop === 'yard' && latestCompletedEntry && latestDestination !== 'dubai') {
-    return 'Yard-origin entry requires the latest completed cycle destination to be dubai';
+  if (latestDestination === 'freezone' && originStop !== 'gate') {
+    return 'Latest completed Free Zone trip must start the next trip from Gate';
   }
-
-  return null;
-};
-
-const getRequiredOriginStopForDestination = (destination) => {
-  const normalizedDestination = normalizeDestination(destination);
-
-  if (normalizedDestination === 'freeZone') return 'gate';
-  if (normalizedDestination === 'dubai') return 'yard';
 
   return null;
 };
 
 const resolveOriginStopForDestination = (destination, submittedOriginStop) => {
-  const requiredOriginStop = getRequiredOriginStopForDestination(destination);
   const normalizedOriginStop = normalizeOriginStop(submittedOriginStop);
 
-  if (requiredOriginStop === 'gate' && normalizedOriginStop !== undefined && normalizedOriginStop !== 'gate') {
-    return { error: { status: 400, message: 'Free Zone trucks must start from Gate entry' } };
+  if (!normalizeDestination(destination)) {
+    return { error: { status: 400, message: 'destination must be either dubai or freezone' } };
   }
 
-  if (requiredOriginStop === 'yard' && normalizedOriginStop !== undefined && normalizedOriginStop !== 'yard') {
-    return { error: { status: 400, message: 'Dubai trucks must start from Yard entry' } };
+  if (normalizedOriginStop !== undefined && !isValidOriginStop(normalizedOriginStop)) {
+    return { error: { status: 400, message: 'originStop must be either yard or gate' } };
   }
 
-  return { originStop: requiredOriginStop };
+  return { originStop: normalizedOriginStop || 'yard' };
 };
 
 const createTruckEntry = async (req, res, next) => {
@@ -243,6 +235,12 @@ const createTruckEntry = async (req, res, next) => {
 
     if (duplicateOpenEntry) {
       return res.status(409).json({ success: false, message: 'Duplicate active truck entry already exists' });
+    }
+
+    const originCycleError = validateOriginCycle(originStop, getLatestCompletedEntry(existingEntries));
+
+    if (originCycleError) {
+      return res.status(400).json({ success: false, message: originCycleError });
     }
 
     const entryAt = body.entryAt ? parseSelectedLocalDateTime(body.entryAt) : selectedLocalDateTimeFromDate(new Date());
