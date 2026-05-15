@@ -91,9 +91,15 @@ assert.strictEqual(serializedGateOrigin.nextStop, 'port');
 
 assert.strictEqual(validateOriginCycle('yard', null), null);
 assert.strictEqual(validateOriginCycle('yard', { destination: 'dubai' }), null);
-assert.match(validateOriginCycle('yard', { destination: 'freezone' }), /Gate/);
+assert.strictEqual(
+  validateOriginCycle('yard', { destination: 'freezone' }),
+  'This truck completed Free Zone, so the next trip can be added only at Gate'
+);
 assert.strictEqual(validateOriginCycle('gate', null), null);
-assert.match(validateOriginCycle('gate', { destination: 'dubai' }), /Yard/);
+assert.strictEqual(
+  validateOriginCycle('gate', { destination: 'dubai' }),
+  'This truck completed Dubai, so the next trip can be added only at Yard'
+);
 assert.strictEqual(validateOriginCycle('gate', { destination: 'freezone' }), null);
 assert.strictEqual(validateOriginCycle('gate', { destination: 'free_zone' }), null);
 
@@ -241,7 +247,10 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
   });
 
   assert.strictEqual(previousDubaiGateOrigin.statusCode, 400);
-  assert.match(previousDubaiGateOrigin.body.message, /Yard/);
+  assert.strictEqual(
+    previousDubaiGateOrigin.body.message,
+    'This truck completed Dubai, so the next trip can be added only at Yard'
+  );
 
   const previousFreezoneYardOrigin = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
@@ -249,7 +258,10 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
   });
 
   assert.strictEqual(previousFreezoneYardOrigin.statusCode, 400);
-  assert.match(previousFreezoneYardOrigin.body.message, /Gate/);
+  assert.strictEqual(
+    previousFreezoneYardOrigin.body.message,
+    'This truck completed Free Zone, so the next trip can be added only at Gate'
+  );
 
   console.log('truck entry controller tests passed');
 })().catch((error) => {

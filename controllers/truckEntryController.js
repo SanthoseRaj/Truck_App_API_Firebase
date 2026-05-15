@@ -180,11 +180,11 @@ const validateOriginCycle = (originStop, latestCompletedEntry) => {
   const latestDestination = normalizeDestination(latestCompletedEntry?.destination);
 
   if (latestDestination === 'dubai' && originStop !== 'yard') {
-    return 'Latest completed Dubai trip must start the next trip from Yard';
+    return 'This truck completed Dubai, so the next trip can be added only at Yard';
   }
 
   if (latestDestination === 'freezone' && originStop !== 'gate') {
-    return 'Latest completed Free Zone trip must start the next trip from Gate';
+    return 'This truck completed Free Zone, so the next trip can be added only at Gate';
   }
 
   return null;
