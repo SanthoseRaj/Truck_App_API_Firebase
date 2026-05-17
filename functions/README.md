@@ -79,7 +79,7 @@ These users are seeded automatically on server start if they do not already exis
 2. Gate
 3. Port Loading
 4. Custom Clearence
-5. Dubai / Free Zone
+5. Dubai or Free Zone
 
 ## Notes
 

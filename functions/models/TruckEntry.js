@@ -32,6 +32,11 @@ const truckEntryUpdateSchema = new mongoose.Schema(
 
 const truckEntrySchema = new mongoose.Schema(
   {
+    truckId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Truck',
+      required: [true, 'Truck is required'],
+    },
     headTruckNumber: {
       type: String,
       required: [true, 'Head truck number is required'],
@@ -48,6 +53,10 @@ const truckEntrySchema = new mongoose.Schema(
       type: String,
       required: [true, 'Supplier name is required'],
       trim: true,
+    },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supplier',
     },
     shipId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -91,7 +100,7 @@ const truckEntrySchema = new mongoose.Schema(
     },
     truckModel: {
       type: String,
-      enum: ['threeAxis', 'sixAxis'],
+      enum: ['sixAxis', 'fourAxis'],
       required: [true, 'Truck model is required'],
     },
     destination: {

@@ -4,7 +4,7 @@ const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
-const operators = ['admin', 'yard', 'gate', 'port', 'clearence', 'dubai'];
+const operators = ['admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
 
 router.use(protect);
 
@@ -101,6 +101,10 @@ router.post('/:truckId/move-next', allowRoles(...operators), moveNext);
  *       200:
  *         description: Trip history
  */
-router.get('/:truckId/history', allowRoles('owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai'), getTripHistory);
+router.get(
+  '/:truckId/history',
+  allowRoles('owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'),
+  getTripHistory
+);
 
 module.exports = router;

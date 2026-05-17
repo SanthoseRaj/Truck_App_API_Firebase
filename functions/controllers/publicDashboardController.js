@@ -1,28 +1,30 @@
 const TruckEntry = require('../models/TruckEntry');
 const { normalizeDestination } = require('../utils/destination');
+const {
+  normalizeStop,
+  getWorkflowStopsForDestination,
+  getNextStopForDestination,
+  getReturnRouteForDestination,
+} = require('../utils/workflow');
 const { formatSelectedLocalDateTime } = require('../utils/selectedLocalDateTime');
 
-const workflowStops = ['yard', 'gate', 'port', 'clearence', 'dubai'];
 const routeKeys = {
   yard: 'yardToGate',
   gate: 'gateToPort',
   port: 'portToClearence',
-  clearence: 'clearenceToDubai',
 };
 const dashboardDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const normalizeText = (value) => value?.toString().toLowerCase().trim();
 const getOriginStop = (truckEntry) => truckEntry.originStop || 'yard';
-const getWorkflowStops = (truckEntry) => {
-  const originStop = getOriginStop(truckEntry);
-  const originIndex = workflowStops.indexOf(originStop);
-
-  return originIndex >= 0 ? workflowStops.slice(originIndex) : workflowStops;
-};
+const getWorkflowStops = (truckEntry) =>
+  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
 
 const hasUpdate = (truckEntry, stop, status) =>
   (truckEntry.updates || []).some(
-    (update) => normalizeText(update.stop) === stop && normalizeText(update.status) === status
+    (update) =>
+      normalizeStop(update.stop, normalizeDestination(truckEntry.destination)) === stop &&
+      normalizeText(update.status) === status
   );
 
 const getLatestUpdate = (truckEntry, range = null) => {
@@ -37,9 +39,20 @@ const getLatestUpdate = (truckEntry, range = null) => {
   return [...updates].sort((a, b) => new Date(a.updatedAt) - new Date(b.updatedAt)).at(-1);
 };
 
-const getNextStop = (stop) => {
-  const index = workflowStops.indexOf(stop);
-  return index >= 0 && index < workflowStops.length - 1 ? workflowStops[index + 1] : null;
+const getNextStopForEntry = (stop, truckEntry) =>
+  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+
+const getRouteKeyForEntry = (stop, truckEntry) => {
+  const normalizedStop = normalizeStop(stop, normalizeDestination(truckEntry.destination));
+
+  if (normalizedStop === 'clearence') {
+    return normalizeDestination(truckEntry.destination) === 'freezone' ? 'clearenceToFreezone' : 'clearenceToDubai';
+  }
+
+  if (normalizedStop === 'dubai') return 'dubaiToYard';
+  if (normalizedStop === 'freezone') return 'freezoneToGate';
+
+  return routeKeys[normalizedStop];
 };
 
 const getWorkflowStatus = (truckEntry) => {
@@ -77,13 +90,6 @@ const getWorkflowState = (truckEntry) => {
     currentAllowedStop: null,
     currentAction: null,
   };
-};
-
-const getTruckIdentity = (truckEntry) => {
-  const head = normalizeText(truckEntry.headTruckNumber) || '';
-  const tail = normalizeText(truckEntry.tailTrailerNumber) || '';
-
-  return `${head}|${tail}`;
 };
 
 const getDashboardDateRange = (value) => {
@@ -140,10 +146,34 @@ const filterDashboardTruckEntriesByDate = (truckEntries, date) => {
   });
 };
 
+const getActiveMapCount = (counts) => {
+  const stops = counts.stops || {};
+  const routes = counts.routes || {};
+
+  return (
+    (stops.yard || 0) +
+    (stops.gate || 0) +
+    (stops.port || 0) +
+    (stops.portLoading || 0) +
+    (stops.clearence || 0) +
+    (stops.customClearance || 0) +
+    (stops.dubai || 0) +
+    (stops.freezone || 0) +
+    (routes.yardToGate || 0) +
+    (routes.gateToPort || 0) +
+    (routes.portToClearence || 0) +
+    (routes.clearenceToDubai || 0) +
+    (routes.clearenceToFreezone || 0) +
+    (routes.dubaiToYard || 0) +
+    (routes.freezoneToGate || 0)
+  );
+};
+
 const serializePublicTruckEntry = (truckEntry, options = {}) => {
   const entry = truckEntry.toObject ? truckEntry.toObject() : truckEntry;
   const latestUpdate = getLatestUpdate(entry, options.dateRange);
-  const currentStop = normalizeText(latestUpdate?.stop) || null;
+  const destination = normalizeDestination(entry.destination);
+  const currentStop = normalizeStop(latestUpdate?.stop, destination);
   const latestStatus = normalizeText(latestUpdate?.status) || null;
   const workflowStatus = options.dateRange
     ? latestStatus === 'completed'
@@ -170,11 +200,13 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     driverMobile: entry.driverMobile,
     driverTdCardNumber: entry.driverTdCardNumber,
     truckModel: entry.truckModel,
-    destination: normalizeDestination(entry.destination),
+    destination,
+    dubaiFreeZoneDestination: destination,
+    destinationType: destination,
     originStop: getOriginStop(entry),
     currentStop,
     currentStatus,
-    nextStop: workflowStatus === 'completed' ? null : getNextStop(currentStop),
+    nextStop: workflowStatus === 'completed' ? null : getNextStopForEntry(currentStop, entry),
     workflowStatus,
     ...workflowState,
     updates: (entry.updates || []).map((update) => {
@@ -182,7 +214,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
       const status = normalizeText(update.status);
 
       return {
-        stop: normalizeText(update.stop),
+        stop: normalizeStop(update.stop, destination),
         status,
         updatedAt: selectedAt,
         teamName: update.teamName,
@@ -206,24 +238,23 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
       port: 0,
       clearence: 0,
       dubai: 0,
+      freezone: 0,
     },
     routes: {
       yardToGate: 0,
       gateToPort: 0,
       portToClearence: 0,
       clearenceToDubai: 0,
+      clearenceToFreezone: 0,
+      dubaiToYard: 0,
+      freezoneToGate: 0,
     },
   };
 
-  const activeTruckIdentities = new Set();
-
   truckEntries.forEach((truckEntry) => {
     if (options.dateScoped) {
-      counts.totalActive += 1;
-
       if (truckEntry.currentStop === 'dubai' && ['exit', 'completed'].includes(truckEntry.currentStatus)) {
         counts.exitedDubai += 1;
-        return;
       }
 
       if (truckEntry.currentStatus === 'entry' && truckEntry.currentStop in counts.stops) {
@@ -231,9 +262,19 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
         return;
       }
 
-      if (truckEntry.currentStatus === 'exit' || truckEntry.currentStatus === 'moving') {
-        const routeKey = routeKeys[truckEntry.currentStop];
-        const nextStop = getNextStop(truckEntry.currentStop);
+      if (
+        truckEntry.currentStatus === 'exit' ||
+        truckEntry.currentStatus === 'moving' ||
+        truckEntry.currentStatus === 'completed'
+      ) {
+        const routeKey =
+          truckEntry.workflowStatus === 'completed' || ['dubai', 'freezone'].includes(truckEntry.currentStop)
+            ? getReturnRouteForDestination(truckEntry.destination)
+            : getRouteKeyForEntry(truckEntry.currentStop, truckEntry);
+        const nextStop =
+          truckEntry.workflowStatus === 'completed' || ['dubai', 'freezone'].includes(truckEntry.currentStop)
+            ? routeKey
+            : getNextStopForEntry(truckEntry.currentStop, truckEntry);
 
         if (routeKey && nextStop) {
           counts.routes[routeKey] += 1;
@@ -248,28 +289,34 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
       counts.exitedDubai += 1;
     }
 
-    if (truckEntry.workflowStatus === 'completed') return;
+    if (truckEntry.workflowStatus === 'completed') {
+      const routeKey = getReturnRouteForDestination(truckEntry.destination);
+
+      if (routeKey) {
+        counts.routes[routeKey] += 1;
+        counts.moving += 1;
+      }
+
+      return;
+    }
 
     if (truckEntry.currentStatus === 'entry' && truckEntry.currentStop in counts.stops) {
       counts.stops[truckEntry.currentStop] += 1;
     }
 
     if (truckEntry.currentStatus === 'exit' || truckEntry.currentStatus === 'moving') {
-      const routeKey = routeKeys[truckEntry.currentStop];
-      const nextStop = getNextStop(truckEntry.currentStop);
+      const routeKey = getRouteKeyForEntry(truckEntry.currentStop, truckEntry);
+      const nextStop = getNextStopForEntry(truckEntry.currentStop, truckEntry);
 
       if (routeKey && nextStop) {
         counts.routes[routeKey] += 1;
         counts.moving += 1;
       }
     }
-
-    activeTruckIdentities.add(getTruckIdentity(truckEntry));
   });
 
-  if (!options.dateScoped) {
-    counts.totalActive = activeTruckIdentities.size;
-  }
+  counts.totalActive = getActiveMapCount(counts);
+  counts.totalTrucks = counts.totalActive;
 
   return counts;
 };
@@ -321,5 +368,6 @@ module.exports = {
   buildDashboardDateFilter,
   filterDashboardTruckEntriesByDate,
   getDashboardDateRange,
+  getActiveMapCount,
   serializePublicTruckEntry,
 };

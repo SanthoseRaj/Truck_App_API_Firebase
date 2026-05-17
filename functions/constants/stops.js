@@ -3,7 +3,8 @@ const STOPS = [
   'Gate',
   'Port Loading',
   'Custom Clearence',
-  'Dubai / Free Zone',
+  'Dubai',
+  'Free Zone',
 ];
 
 const STOP_ROLE_MAP = {
@@ -11,7 +12,8 @@ const STOP_ROLE_MAP = {
   Gate: 'gate',
   'Port Loading': 'port',
   'Custom Clearence': 'clearence',
-  'Dubai / Free Zone': 'dubai',
+  Dubai: 'dubai',
+  'Free Zone': 'freezone',
 };
 
 const ROUTE_MARKERS = [
@@ -19,13 +21,19 @@ const ROUTE_MARKERS = [
   { stop: 'Gate', lat: 25.234, lng: 55.3001, order: 2 },
   { stop: 'Port Loading', lat: 25.2697, lng: 55.289, order: 3 },
   { stop: 'Custom Clearence', lat: 25.276987, lng: 55.296249, order: 4 },
-  { stop: 'Dubai / Free Zone', lat: 25.0657, lng: 55.1713, order: 5 },
+  { stop: 'Dubai', lat: 25.0657, lng: 55.1713, order: 5 },
+  { stop: 'Free Zone', lat: 25.1124, lng: 55.1389, order: 6 },
 ];
 
-const ROUTE_LINES = STOPS.slice(0, -1).map((from, index) => ({
-  from,
-  to: STOPS[index + 1],
-}));
+const ROUTE_LINES = [
+  { from: 'Yard', to: 'Gate' },
+  { from: 'Gate', to: 'Port Loading' },
+  { from: 'Port Loading', to: 'Custom Clearence' },
+  { from: 'Custom Clearence', to: 'Dubai' },
+  { from: 'Custom Clearence', to: 'Free Zone' },
+  { from: 'Dubai', to: 'Yard' },
+  { from: 'Free Zone', to: 'Gate' },
+];
 
 module.exports = {
   STOPS,

@@ -11,8 +11,8 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: 'http://localhost:5000',
-        description: 'Local development server',
+        url: process.env.SWAGGER_SERVER_URL || 'http://127.0.0.1:5001/truckapp-api/us-central1/api',
+        description: 'Firebase Functions emulator',
       },
     ],
     components: {
@@ -34,8 +34,9 @@ const swaggerOptions = {
             mobileNumber: { type: 'string', example: '+971500000000' },
             role: {
               type: 'string',
-              enum: ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai'],
+              enum: ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
             },
+            assignedStop: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'] },
             entryTeam: {
               $ref: '#/components/schemas/EntryTeam',
             },
@@ -44,14 +45,27 @@ const swaggerOptions = {
         EntryTeam: {
           type: 'object',
           properties: {
-            id: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'yard' },
+            id: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
             name: { type: 'string', example: 'Yard Entry Team' },
             stop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai / Free Zone'],
+              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
             },
-            role: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'yard' },
+            role: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
+            assignedStop: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
             order: { type: 'number', example: 1 },
             lat: { type: 'number', example: 25.2048 },
             lng: { type: 'number', example: 55.2708 },
@@ -71,12 +85,21 @@ const swaggerOptions = {
           type: 'object',
           required: ['entryTeamId', 'name', 'mobileNumber', 'username', 'password'],
           properties: {
-            entryTeamId: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'yard' },
+            entryTeamId: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
             entryTeamName: { type: 'string', example: 'Yard Entry Team' },
             entryTeamStop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai / Free Zone'],
+              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
+            },
+            assignedStop: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
             },
             name: { type: 'string', example: 'Yard Member' },
             mobileNumber: { type: 'string', example: '+971500000002' },
@@ -87,12 +110,21 @@ const swaggerOptions = {
         UpdateMemberInput: {
           type: 'object',
           properties: {
-            entryTeamId: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'yard' },
+            entryTeamId: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
             entryTeamName: { type: 'string', example: 'Yard Entry Team' },
             entryTeamStop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai / Free Zone'],
+              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
+            },
+            assignedStop: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
             },
             name: { type: 'string', example: 'Updated Yard Member' },
             mobileNumber: { type: 'string', example: '+971500000099' },
@@ -104,55 +136,32 @@ const swaggerOptions = {
         Truck: {
           type: 'object',
           properties: {
-            truckNumber: { type: 'string', example: 'TRK001' },
-            supplierName: { type: 'string', example: 'ABC Logistics' },
-            tripNumber: { type: 'string', example: 'TRIP-1001' },
-            driverName: { type: 'string', example: 'Mohammed Ali' },
-            driverMobile: { type: 'string', example: '+971500000000' },
-            idCard: { type: 'string', example: 'ID123456' },
-            truckModel: { type: 'string', enum: ['3 axis', '6 axis'] },
-            tripCount: { type: 'number', example: 1 },
-            currentStop: {
-              type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai / Free Zone'],
-            },
-            status: {
-              type: 'string',
-              enum: ['waiting', 'entered', 'exited', 'in_transit', 'completed'],
-            },
-            isActive: { type: 'boolean' },
+            id: { type: 'string' },
+            headTruckNumber: { type: 'string', example: 'OM-NEW-1001' },
+            tailTrailerNumber: { type: 'string', example: 'TRL-1001' },
+            truckModel: { type: 'string', enum: ['sixAxis', 'fourAxis'], example: 'sixAxis' },
+            isActive: { type: 'boolean', example: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
           },
         },
         TruckInput: {
           type: 'object',
-          required: ['truckNumber', 'supplierName', 'tripNumber', 'driverName', 'driverMobile', 'idCard', 'truckModel'],
+          required: ['headTruckNumber', 'tailTrailerNumber', 'truckModel'],
           properties: {
-            truckNumber: { type: 'string', example: 'TRK001' },
-            supplierName: { type: 'string', example: 'ABC Logistics' },
-            tripNumber: { type: 'string', example: 'TRIP-1001' },
-            driverName: { type: 'string', example: 'Mohammed Ali' },
-            driverMobile: { type: 'string', example: '+971500000000' },
-            idCard: { type: 'string', example: 'ID123456' },
-            truckModel: { type: 'string', enum: ['3 axis', '6 axis'], example: '3 axis' },
+            headTruckNumber: { type: 'string', example: 'OM-NEW-1001' },
+            tailTrailerNumber: { type: 'string', example: 'TRL-NEW-1001' },
+            truckModel: { type: 'string', enum: ['sixAxis', 'fourAxis'], example: 'sixAxis' },
+            isActive: { type: 'boolean', example: true },
           },
         },
         TruckUpdateInput: {
           type: 'object',
           properties: {
-            supplierName: { type: 'string' },
-            tripNumber: { type: 'string' },
-            driverName: { type: 'string' },
-            driverMobile: { type: 'string' },
-            idCard: { type: 'string' },
-            truckModel: { type: 'string', enum: ['3 axis', '6 axis'] },
-            currentStop: {
-              type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai / Free Zone'],
-            },
-            status: {
-              type: 'string',
-              enum: ['waiting', 'entered', 'exited', 'in_transit', 'completed'],
-            },
+            headTruckNumber: { type: 'string', example: 'OM-1014' },
+            tailTrailerNumber: { type: 'string', example: 'TRL-1002' },
+            truckModel: { type: 'string', enum: ['sixAxis', 'fourAxis'], example: 'fourAxis' },
+            isActive: { type: 'boolean', example: true },
           },
         },
         Ship: {
@@ -224,6 +233,7 @@ const swaggerOptions = {
         TruckEntry: {
           type: 'object',
           properties: {
+            truckId: { type: 'string', example: 'TRUCK_OBJECT_ID' },
             headTruckNumber: { type: 'string', example: 'OM-TRK-1021' },
             tailTrailerNumber: { type: 'string', example: 'TRL-5821' },
             supplierName: { type: 'string', example: 'Muscat Gulf Logistics' },
@@ -235,17 +245,31 @@ const swaggerOptions = {
             driverName: { type: 'string', example: 'Nabil Al Hinai' },
             driverMobile: { type: 'string', example: '+96890011212' },
             driverTdCardNumber: { type: 'string', example: 'ID-88421' },
-            truckModel: { type: 'string', enum: ['threeAxis', 'sixAxis'], example: 'sixAxis' },
+            truckModel: { type: 'string', enum: ['sixAxis', 'fourAxis'], example: 'sixAxis' },
             destination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
+            dubaiFreeZoneDestination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
+            destinationType: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
             originStop: { type: 'string', enum: ['yard', 'gate'], example: 'yard' },
-            currentStop: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'yard' },
+            currentStop: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'yard',
+            },
             currentStatus: { type: 'string', enum: ['entry', 'exit', 'completed'], example: 'entry' },
             updates: {
               type: 'array',
               items: { $ref: '#/components/schemas/TruckEntryUpdate' },
             },
-            currentAllowedRole: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'gate' },
-            currentAllowedStop: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai'], example: 'gate' },
+            currentAllowedRole: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'gate',
+            },
+            currentAllowedStop: {
+              type: 'string',
+              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              example: 'gate',
+            },
             currentAction: { type: 'string', enum: ['entry', 'exit'], example: 'entry' },
             workflowStatus: { type: 'string', enum: ['pending', 'completed'], example: 'pending' },
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },
@@ -257,6 +281,7 @@ const swaggerOptions = {
         TruckEntryInput: {
           type: 'object',
           required: [
+            'truckId',
             'headTruckNumber',
             'tailTrailerNumber',
             'supplierName',
@@ -272,6 +297,7 @@ const swaggerOptions = {
             'destination',
           ],
           properties: {
+            truckId: { type: 'string', example: 'TRUCK_OBJECT_ID' },
             headTruckNumber: { type: 'string', example: 'OM-TRK-1021' },
             tailTrailerNumber: { type: 'string', example: 'TRL-5821' },
             supplierName: { type: 'string', example: 'Muscat Gulf Logistics' },
@@ -283,7 +309,7 @@ const swaggerOptions = {
             driverName: { type: 'string', example: 'Nabil Al Hinai' },
             driverMobile: { type: 'string', example: '+96890011212' },
             driverTdCardNumber: { type: 'string', example: 'ID-88421' },
-            truckModel: { type: 'string', enum: ['threeAxis', 'sixAxis'], example: 'sixAxis' },
+            truckModel: { type: 'string', enum: ['sixAxis', 'fourAxis'], example: 'sixAxis' },
             destination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
             originStop: { type: 'string', enum: ['yard', 'gate'], example: 'yard' },
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },

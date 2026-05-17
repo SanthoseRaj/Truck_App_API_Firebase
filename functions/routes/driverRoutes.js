@@ -10,9 +10,9 @@ const { protect } = require('../middleware/authMiddleware');
 const { allowRoles } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
-const driverReaders = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai'];
+const driverReaders = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
 const driverCreators = ['owner', 'admin'];
-const driverEditors = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai'];
+const driverEditors = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
 
 router.use(protect);
 

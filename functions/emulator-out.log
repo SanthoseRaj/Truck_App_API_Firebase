@@ -1,0 +1,127 @@
+
+> serve
+> firebase emulators:start --only functions
+
+[2026-05-16T16:03:38.461Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[2026-05-16T16:03:38.465Z] > authorizing via signed-in user (viskez.tech@gmail.com)
+i  emulators: Starting emulators: functions {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions"}}
+[2026-05-16T16:03:38.481Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-05-16T16:03:38.482Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[2026-05-16T16:03:38.493Z] Write emulator hub locator at C:\Users\DELL\AppData\Local\Temp\hub-truckapp-api.json
+[2026-05-16T16:03:38.526Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-05-16T16:03:38.527Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-05-16T16:03:38.528Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[2026-05-16T16:03:38.529Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+!  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, firestore, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[2026-05-16T16:03:38.566Z] defaultcredentials: writing to file C:\Users\DELL\AppData\Roaming\firebase\viskez_tech_gmail.com_application_default_credentials.json
+[2026-05-16T16:03:38.571Z] Setting GAC to C:\Users\DELL\AppData\Roaming\firebase\viskez_tech_gmail.com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to C:\\Users\\DELL\\AppData\\Roaming\\firebase\\viskez_tech_gmail.com_application_default_credentials.json"}}
+[2026-05-16T16:03:38.574Z] Checked if tokens are valid: true, expires at: 1778950671314
+[2026-05-16T16:03:38.575Z] Checked if tokens are valid: true, expires at: 1778950671314
+[2026-05-16T16:03:38.578Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/truckapp-api/adminSdkConfig [none]
+[2026-05-16T16:03:39.167Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/truckapp-api/adminSdkConfig 200
+[2026-05-16T16:03:39.206Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/truckapp-api/adminSdkConfig {"projectId":"truckapp-api","storageBucket":"truckapp-api.firebasestorage.app"}
+i  functions: Watching "E:\Truck App backend_firebase\functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"E:\\Truck App backend_firebase\\functions\" for Cloud Functions..."}}
+[2026-05-16T16:03:39.295Z] Validating nodejs source
+[2026-05-16T16:03:41.435Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "24"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.2",
+    "morgan": "^1.10.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.4.1"
+  },
+  "private": true
+}
+[2026-05-16T16:03:41.438Z] Building nodejs source
+[2026-05-16T16:03:41.439Z] Failed to find version of module node: reached end of search path E:\Truck App backend_firebase\functions\node_modules
+!  functions: Your requested "node" version "24" doesn't match your global version "20". Using node@20 from host. 
+i  functions: Loaded environment variables from .env. 
+[2026-05-16T16:03:41.447Z] Could not find functions.yaml. Must use http discovery
+[2026-05-16T16:03:41.459Z] Found firebase-functions binary at 'E:\Truck App backend_firebase\functions\node_modules\.bin\firebase-functions'
+Serving at port 8128
+
+◇ injected env (3) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+
+[2026-05-16T16:03:43.133Z] Got response from /__/functions.yaml {"endpoints":{"api":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":10,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["us-central1"],"labels":{},"httpsTrigger":{},"entryPoint":"api"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+MongoDB connected: ac-mgizjce-shard-00-02.ojzyfsj.mongodb.net
+
+(node:616) [MONGOOSE] Warning: mongoose: Duplicate schema index on {"supplierNameKey":1} for model "Supplier". This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+Firebase Function database connected
+
++  functions: Loaded functions definitions from source: api. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: api."}}
++  functions[us-central1-api]: http function initialized (http://127.0.0.1:5001/truckapp-api/us-central1/api). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/truckapp-api/us-central1/api)."}}
+[2026-05-16T16:03:53.236Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 
+[2026-05-16T16:04:05.512Z] [work-queue] {"queuedWork":["/truckapp-api/us-central1/api/-2026-05-16T16:04:05.512Z"],"queueLength":1,"runningWork":[],"workRunningCount":0}
+[2026-05-16T16:04:05.515Z] [work-queue] {"queuedWork":[],"queueLength":0,"runningWork":["/truckapp-api/us-central1/api/-2026-05-16T16:04:05.512Z"],"workRunningCount":1}
+[2026-05-16T16:04:05.516Z] Accepted request GET /truckapp-api/us-central1/api/ --> us-central1-api
+[2026-05-16T16:04:05.520Z] [functions] Runtime ready! Sending request! {"metadata":{"emulator":{"name":"functions"},"message":"[functions] Runtime ready! Sending request!"}}
+[2026-05-16T16:04:05.521Z] [functions] Got req.url=/truckapp-api/us-central1/api/, mapping to path=/ {"metadata":{"emulator":{"name":"functions"},"message":"[functions] Got req.url=/truckapp-api/us-central1/api/, mapping to path=/"}}
+i  functions: Loaded environment variables from .env. 
+[2026-05-16T16:04:05.536Z] [worker-pool] addWorker(us-central1-api) {"metadata":{"emulator":{"name":"functions"},"message":"[worker-pool] addWorker(us-central1-api)"}}
+[2026-05-16T16:04:05.538Z] [worker-pool] Adding worker with key us-central1-api, total=1 {"metadata":{"emulator":{"name":"functions"},"message":"[worker-pool] Adding worker with key us-central1-api, total=1"}}
+[2026-05-16T16:04:07.381Z] [runtime-status] [13156] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.10.0","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-admin\\lib\\index.js"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Resolved module firebase-admin {\"declared\":true,\"installed\":true,\"version\":\"13.10.0\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-admin\\\\lib\\\\index.js\"}"}}
+[2026-05-16T16:04:07.384Z] [runtime-status] [13156] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.2.5","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-functions\\lib\\v2\\index.js"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Resolved module firebase-functions {\"declared\":true,\"installed\":true,\"version\":\"7.2.5\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-functions\\\\lib\\\\v2\\\\index.js\"}"}}
+[2026-05-16T16:04:07.385Z] [runtime-status] [13156] Outgoing network have been stubbed. [{"name":"http","status":"mocked"},{"name":"http","status":"mocked"},{"name":"https","status":"mocked"},{"name":"https","status":"mocked"},{"name":"net","status":"mocked"}] {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Outgoing network have been stubbed. [{\"name\":\"http\",\"status\":\"mocked\"},{\"name\":\"http\",\"status\":\"mocked\"},{\"name\":\"https\",\"status\":\"mocked\"},{\"name\":\"https\",\"status\":\"mocked\"},{\"name\":\"net\",\"status\":\"mocked\"}]"}}
+[2026-05-16T16:04:07.385Z] [runtime-status] [13156] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.2.5","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-functions\\lib\\v2\\index.js"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Resolved module firebase-functions {\"declared\":true,\"installed\":true,\"version\":\"7.2.5\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-functions\\\\lib\\\\v2\\\\index.js\"}"}}
+[2026-05-16T16:04:07.386Z] [runtime-status] [13156] Detected firebase-functions v7+, skipping legacy stubs. {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Detected firebase-functions v7+, skipping legacy stubs."}}
+[2026-05-16T16:04:07.387Z] [runtime-status] [13156] Resolved module firebase-admin {"declared":true,"installed":true,"version":"13.10.0","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-admin\\lib\\index.js"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Resolved module firebase-admin {\"declared\":true,\"installed\":true,\"version\":\"13.10.0\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-admin\\\\lib\\\\index.js\"}"}}
+[2026-05-16T16:04:07.601Z] [runtime-status] [13156] Resolved module firebase-functions {"declared":true,"installed":true,"version":"7.2.5","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-functions\\lib\\v2\\index.js"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Resolved module firebase-functions {\"declared\":true,\"installed\":true,\"version\":\"7.2.5\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-functions\\\\lib\\\\v2\\\\index.js\"}"}}
+[2026-05-16T16:04:10.303Z] [runtime-status] [13156] firebase-admin has been stubbed. {"adminResolution":{"declared":true,"installed":true,"version":"13.10.0","resolution":"E:\\Truck App backend_firebase\\functions\\node_modules\\firebase-admin\\lib\\index.js"}} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] firebase-admin has been stubbed. {\"adminResolution\":{\"declared\":true,\"installed\":true,\"version\":\"13.10.0\",\"resolution\":\"E:\\\\Truck App backend_firebase\\\\functions\\\\node_modules\\\\firebase-admin\\\\lib\\\\index.js\"}}"}}
+>  ◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' } {"user":"◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m ◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }"}}
+[2026-05-16T16:04:11.606Z] [runtime-status] [13156] Functions runtime initialized. {"cwd":"E:\\Truck App backend_firebase\\functions","node_version":"20.19.5"} {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Functions runtime initialized. {\"cwd\":\"E:\\\\Truck App backend_firebase\\\\functions\",\"node_version\":\"20.19.5\"}"}}
+[2026-05-16T16:04:11.609Z] [runtime-status] [13156] Listening to port: \\?\pipe\fire_emu_9aed6ffa5cda95be {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[runtime-status] [13156] Listening to port: \\\\?\\pipe\\fire_emu_9aed6ffa5cda95be"}}
+[2026-05-16T16:04:11.723Z] [worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: IDLE {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: IDLE"}}
+[2026-05-16T16:04:11.726Z] [worker-pool] submitRequest(triggerId=us-central1-api) {"metadata":{"emulator":{"name":"functions"},"message":"[worker-pool] submitRequest(triggerId=us-central1-api)"}}
+i  functions: Beginning execution of "us-central1-api" {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"Beginning execution of \"us-central1-api\""}}
+[2026-05-16T16:04:11.730Z] [worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: BUSY {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: BUSY"}}
+[2026-05-16T16:04:11.828Z] Finishing up request with event=pause {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"Finishing up request with event=pause"}}
+i  functions: Finished "us-central1-api" in 99.3533ms {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"Finished \"us-central1-api\" in 99.3533ms"}}
+[2026-05-16T16:04:11.830Z] [worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: IDLE {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"[worker-us-central1-api-a76470db-3d97-4338-924e-7ab5308b651f]: IDLE"}}
+[2026-05-16T16:04:11.831Z] Finishing up request with event=finish {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"Finishing up request with event=finish"}}
+[2026-05-16T16:04:11.832Z] Finishing up request with event=close {"metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"Finishing up request with event=close"}}
+[2026-05-16T16:04:11.832Z] [work-queue] {"queuedWork":[],"queueLength":0,"runningWork":[],"workRunningCount":0}
+>  GET / 200 2.766 ms - 85 {"user":"\u001b[0mGET / \u001b[32m200\u001b[0m 2.766 ms - 85\u001b[0m","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m \u001b[0mGET / \u001b[32m200\u001b[0m 2.766 ms - 85\u001b[0m"}}
+>  MongoDB connected: ac-mgizjce-shard-00-01.ojzyfsj.mongodb.net {"user":"MongoDB connected: ac-mgizjce-shard-00-01.ojzyfsj.mongodb.net","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m MongoDB connected: ac-mgizjce-shard-00-01.ojzyfsj.mongodb.net"}}
+>  (node:13156) [MONGOOSE] Warning: mongoose: Duplicate schema index on {"supplierNameKey":1} for model "Supplier". This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition. {"user":"(node:13156) [MONGOOSE] Warning: mongoose: Duplicate schema index on {\"supplierNameKey\":1} for model \"Supplier\". This is often due to declaring an index using both \"index: true\" and \"schema.index()\". Please remove the duplicate index definition.","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m (node:13156) [MONGOOSE] Warning: mongoose: Duplicate schema index on {\"supplierNameKey\":1} for model \"Supplier\". This is often due to declaring an index using both \"index: true\" and \"schema.index()\". Please remove the duplicate index definition."}}
+>  (Use `node --trace-warnings ...` to show where the warning was created) {"user":"(Use `node --trace-warnings ...` to show where the warning was created)","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m (Use `node --trace-warnings ...` to show where the warning was created)"}}
+>  Firebase Function database connected {"user":"Firebase Function database connected","metadata":{"emulator":{"name":"functions"},"function":{"name":"us-central1-api"},"extension":{},"message":"\u001b[90m> \u001b[39m Firebase Function database connected"}}

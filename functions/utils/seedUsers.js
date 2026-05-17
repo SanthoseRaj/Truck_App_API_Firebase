@@ -8,6 +8,7 @@ const defaultUsers = [
   { name: 'Port', username: 'port', role: 'port' },
   { name: 'Clearence', username: 'clearence', role: 'clearence' },
   { name: 'Dubai', username: 'dubai', role: 'dubai' },
+  { name: 'Free Zone', username: 'freezone', role: 'freezone' },
 ];
 
 const seedUsers = async () => {

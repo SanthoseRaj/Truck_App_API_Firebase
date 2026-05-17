@@ -1,5 +1,7 @@
 const assert = require('assert');
 const Ship = require('../models/Ship');
+const Supplier = require('../models/Supplier');
+const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
 const {
   createTruckEntry,
@@ -12,6 +14,7 @@ const {
 
 const baseEntry = {
   _id: 'entry-1',
+  truckId: '507f1f77bcf86cd799439010',
   headTruckNumber: 'HT-100',
   tailTrailerNumber: 'TT-100',
   supplierName: 'Gulf Supplier',
@@ -148,7 +151,9 @@ assert.deepStrictEqual(resolveOriginStopForDestination('FREE_ZONE', 'Gate'), {
 });
 
 const validShipId = '507f1f77bcf86cd799439011';
+const validTruckId = '507f1f77bcf86cd799439010';
 const makeCreateBody = (overrides = {}) => ({
+  truckId: validTruckId,
   headTruckNumber: 'HT-200',
   tailTrailerNumber: 'TT-200',
   supplierName: 'Gulf Supplier',
@@ -186,6 +191,8 @@ const makeCompletedEntry = (destination) => ({
 
 const callCreateTruckEntry = async ({ body, entries = [] }) => {
   const originalFindById = Ship.findById;
+  const originalTruckFindOne = Truck.findOne;
+  const originalSupplierFindOne = Supplier.findOne;
   const originalFind = TruckEntry.find;
   const originalCreate = TruckEntry.create;
   const res = {
@@ -203,6 +210,18 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
   let nextError = null;
 
   Ship.findById = async () => ({ _id: validShipId });
+  Truck.findOne = async () => ({
+    _id: validTruckId,
+    headTruckNumber: body.headTruckNumber.trim().toUpperCase(),
+    tailTrailerNumber: body.tailTrailerNumber.trim().toUpperCase(),
+    truckModel: body.truckModel,
+    isActive: true,
+  });
+  Supplier.findOne = async () => ({
+    _id: body.supplierId || '507f1f77bcf86cd799439012',
+    supplierName: body.supplierId ? 'Supplier By Id' : body.supplierName.trim(),
+    isActive: true,
+  });
   TruckEntry.find = () => ({ sort: async () => entries });
   TruckEntry.create = async (payload) => ({ _id: 'created-entry', ...payload });
 
@@ -216,6 +235,8 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
     );
   } finally {
     Ship.findById = originalFindById;
+    Truck.findOne = originalTruckFindOne;
+    Supplier.findOne = originalSupplierFindOne;
     TruckEntry.find = originalFind;
     TruckEntry.create = originalCreate;
   }
@@ -232,6 +253,8 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
   assert.strictEqual(yardFreezone.statusCode, 201);
   assert.strictEqual(yardFreezone.body.truckEntry.destination, 'freezone');
   assert.strictEqual(yardFreezone.body.truckEntry.originStop, 'yard');
+  assert.strictEqual(yardFreezone.body.truckEntry.supplierName, 'Gulf Supplier');
+  assert.strictEqual(String(yardFreezone.body.truckEntry.supplierId), '507f1f77bcf86cd799439012');
 
   const gateDubai = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'dubai', originStop: 'gate' }),
@@ -240,6 +263,17 @@ const callCreateTruckEntry = async ({ body, entries = [] }) => {
   assert.strictEqual(gateDubai.statusCode, 201);
   assert.strictEqual(gateDubai.body.truckEntry.destination, 'dubai');
   assert.strictEqual(gateDubai.body.truckEntry.originStop, 'gate');
+
+  const supplierById = await callCreateTruckEntry({
+    body: makeCreateBody({
+      supplierId: '507f1f77bcf86cd799439013',
+      supplierName: 'Ignored Supplier Name',
+    }),
+  });
+
+  assert.strictEqual(supplierById.statusCode, 201);
+  assert.strictEqual(supplierById.body.truckEntry.supplierName, 'Supplier By Id');
+  assert.strictEqual(String(supplierById.body.truckEntry.supplierId), '507f1f77bcf86cd799439013');
 
   const previousDubaiGateOrigin = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'gate' }),

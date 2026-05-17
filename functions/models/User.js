@@ -28,7 +28,7 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       required: true,
-      enum: ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai'],
+      enum: ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
     },
     isActive: {
       type: Boolean,
@@ -39,6 +39,7 @@ const userSchema = new mongoose.Schema(
       name: { type: String, trim: true },
       stop: { type: String, trim: true },
       role: { type: String, trim: true },
+      assignedStop: { type: String, trim: true },
       order: { type: Number },
       lat: { type: Number },
       lng: { type: Number },
@@ -47,10 +48,9 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-userSchema.pre('save', async function hashPassword(next) {
-  if (!this.isModified('password')) return next();
+userSchema.pre('save', async function hashPassword() {
+  if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 userSchema.methods.comparePassword = function comparePassword(password) {

@@ -1,116 +1,101 @@
+const mongoose = require('mongoose');
 const Truck = require('../models/Truck');
-const Trip = require('../models/Trip');
-const ActivityLog = require('../models/ActivityLog');
-const { STOPS } = require('../constants/stops');
 
-const createActivity = (truck, user, action, stop, details = '') =>
-  ActivityLog.create({ truck, user, action, stop, details });
+const TRUCK_MODELS = ['sixAxis', 'fourAxis'];
 
-const getNextStop = (stop) => {
-  const index = STOPS.indexOf(stop);
-  return index >= 0 && index < STOPS.length - 1 ? STOPS[index + 1] : undefined;
+const normalizeUpper = (value) => (value || '').trim().toUpperCase();
+
+const serializeTruck = (truck) => ({
+  id: truck._id,
+  headTruckNumber: truck.headTruckNumber,
+  tailTrailerNumber: truck.tailTrailerNumber,
+  truckModel: truck.truckModel,
+  isActive: truck.isActive !== false,
+  createdAt: truck.createdAt,
+  updatedAt: truck.updatedAt,
+});
+
+const validateTruckInput = (body, options = {}) => {
+  const { requireAll = false } = options;
+
+  if ((requireAll || 'headTruckNumber' in body) && !normalizeUpper(body.headTruckNumber)) {
+    return 'Head truck number is required';
+  }
+
+  if ((requireAll || 'tailTrailerNumber' in body) && !normalizeUpper(body.tailTrailerNumber)) {
+    return 'Tail trailer number is required';
+  }
+
+  if (requireAll || 'truckModel' in body) {
+    if (!TRUCK_MODELS.includes(body.truckModel)) {
+      return 'truckModel must be either sixAxis or fourAxis';
+    }
+  }
+
+  if ('isActive' in body && typeof body.isActive !== 'boolean') {
+    return 'isActive must be a boolean';
+  }
+
+  return null;
+};
+
+const handleDuplicateHeadTruckNumber = (error, res) => {
+  if (
+    error.code === 11000 &&
+    (
+      error.keyPattern?.headTruckNumber ||
+      error.keyValue?.headTruckNumber ||
+      error.keyPattern?.truckNumber ||
+      error.keyValue?.truckNumber
+    )
+  ) {
+    res.status(409).json({ success: false, message: 'Head truck number already exists' });
+    return true;
+  }
+
+  return false;
 };
 
 const createTruck = async (req, res, next) => {
   try {
-    const {
-      truckNumber,
-      supplierName,
-      tripNumber,
-      driverName,
-      driverMobile,
-      idCard,
-      truckModel,
-    } = req.body;
-
-    if (!truckNumber || !supplierName || !tripNumber || !driverName || !driverMobile || !idCard || !truckModel) {
-      return res.status(400).json({ success: false, message: 'All truck fields are required' });
+    const validationError = validateTruckInput(req.body, { requireAll: true });
+    if (validationError) {
+      return res.status(400).json({ success: false, message: validationError });
     }
 
-    const normalizedTruckNumber = truckNumber.toUpperCase().trim();
-    let truck = await Truck.findOne({ truckNumber: normalizedTruckNumber });
-    let created = false;
+    const headTruckNumber = normalizeUpper(req.body.headTruckNumber);
+    const existingTruck = await Truck.findOne({ headTruckNumber });
 
-    if (truck) {
-      truck.supplierName = supplierName;
-      truck.tripNumber = tripNumber;
-      truck.driverName = driverName;
-      truck.driverMobile = driverMobile;
-      truck.idCard = idCard;
-      truck.truckModel = truckModel;
-      truck.tripCount += 1;
-      truck.currentStop = STOPS[0];
-      truck.status = 'waiting';
-      truck.isActive = true;
-      await truck.save();
-    } else {
-      created = true;
-      truck = await Truck.create({
-        truckNumber: normalizedTruckNumber,
-        supplierName,
-        tripNumber,
-        driverName,
-        driverMobile,
-        idCard,
-        truckModel,
-        currentStop: STOPS[0],
-        status: 'waiting',
-        createdBy: req.user._id,
-      });
+    if (existingTruck) {
+      return res.status(409).json({ success: false, message: 'Head truck number already exists' });
     }
 
-    const trip = await Trip.create({
-      truck: truck._id,
-      routeStops: STOPS,
-      currentStop: STOPS[0],
-      nextStop: getNextStop(STOPS[0]),
-      status: 'waiting',
-      startedAt: new Date(),
-      updatedBy: req.user._id,
+    const truck = await Truck.create({
+      headTruckNumber,
+      tailTrailerNumber: normalizeUpper(req.body.tailTrailerNumber),
+      truckModel: req.body.truckModel,
+      isActive: typeof req.body.isActive === 'boolean' ? req.body.isActive : true,
+      createdBy: req.user._id,
     });
 
-    await createActivity(
-      truck._id,
-      req.user._id,
-      created ? 'truck_created' : 'truck_trip_incremented',
-      STOPS[0],
-      created ? 'Truck created at Yard' : `Truck reused for trip count ${truck.tripCount}`
-    );
-
-    return res.status(created ? 201 : 200).json({ success: true, data: { truck, trip } });
+    return res.status(201).json({
+      message: 'Truck created successfully',
+      truck: serializeTruck(truck),
+    });
   } catch (error) {
+    if (handleDuplicateHeadTruckNumber(error, res)) return;
     next(error);
   }
 };
 
 const getTrucks = async (req, res, next) => {
   try {
-    const trucks = await Truck.find({ isActive: true }).populate('createdBy', 'name username role').sort('-createdAt');
-    return res.json({ success: true, count: trucks.length, data: trucks });
-  } catch (error) {
-    next(error);
-  }
-};
+    const isManager = ['owner', 'admin'].includes(req.user.role);
+    const includeInactive = isManager && req.query.includeInactive === 'true';
+    const filter = includeInactive ? {} : { isActive: true };
+    const trucks = await Truck.find(filter).sort('headTruckNumber');
 
-const getTruckById = async (req, res, next) => {
-  try {
-    const truck = await Truck.findOne({ _id: req.params.id, isActive: true }).populate('createdBy', 'name username role');
-    if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
-    return res.json({ success: true, data: truck });
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getTruckByNumber = async (req, res, next) => {
-  try {
-    const truck = await Truck.findOne({
-      truckNumber: req.params.truckNumber.toUpperCase().trim(),
-      isActive: true,
-    }).populate('createdBy', 'name username role');
-
-    if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
-    return res.json({ success: true, data: truck });
+    return res.status(200).json({ trucks: trucks.map(serializeTruck) });
   } catch (error) {
     next(error);
   }
@@ -118,34 +103,66 @@ const getTruckByNumber = async (req, res, next) => {
 
 const updateTruck = async (req, res, next) => {
   try {
-    const disallowed = ['truckNumber', 'tripCount', 'createdBy'];
-    disallowed.forEach((field) => delete req.body[field]);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Truck not found' });
+    }
 
-    const truck = await Truck.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const validationError = validateTruckInput(req.body);
+    if (validationError) {
+      return res.status(400).json({ success: false, message: validationError });
+    }
+
+    const updates = {};
+
+    if ('headTruckNumber' in req.body) {
+      updates.headTruckNumber = normalizeUpper(req.body.headTruckNumber);
+      const duplicateTruck = await Truck.findOne({
+        headTruckNumber: updates.headTruckNumber,
+        _id: { $ne: req.params.id },
+      });
+
+      if (duplicateTruck) {
+        return res.status(409).json({ success: false, message: 'Head truck number already exists' });
+      }
+    }
+
+    if ('tailTrailerNumber' in req.body) {
+      updates.tailTrailerNumber = normalizeUpper(req.body.tailTrailerNumber);
+    }
+    if ('truckModel' in req.body) updates.truckModel = req.body.truckModel;
+    if ('isActive' in req.body) updates.isActive = req.body.isActive;
+
+    const truck = await Truck.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
-    await createActivity(truck._id, req.user._id, 'truck_updated', truck.currentStop, 'Truck details updated');
-    return res.json({ success: true, data: truck });
+
+    return res.status(200).json({
+      message: 'Truck updated successfully',
+      truck: serializeTruck(truck),
+    });
   } catch (error) {
+    if (handleDuplicateHeadTruckNumber(error, res)) return;
     next(error);
   }
 };
 
 const deleteTruck = async (req, res, next) => {
   try {
-    const truck = await Truck.findOneAndUpdate(
-      { _id: req.params.id, isActive: true },
-      { isActive: false },
-      { new: true }
-    );
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Truck not found' });
+    }
+
+    const truck = await Truck.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
 
     if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
-    await createActivity(truck._id, req.user._id, 'truck_deleted', truck.currentStop, 'Truck soft deleted');
-    return res.json({ success: true, message: 'Truck deleted successfully' });
+
+    return res.status(200).json({
+      message: 'Truck deactivated successfully',
+      truck: serializeTruck(truck),
+    });
   } catch (error) {
     next(error);
   }
@@ -154,8 +171,8 @@ const deleteTruck = async (req, res, next) => {
 module.exports = {
   createTruck,
   getTrucks,
-  getTruckById,
-  getTruckByNumber,
   updateTruck,
   deleteTruck,
+  serializeTruck,
+  validateTruckInput,
 };

@@ -7,6 +7,7 @@ const entryTeams = ROUTE_MARKERS.map((marker) => ({
   name: `${marker.stop} Entry Team`,
   stop: marker.stop,
   role: STOP_ROLE_MAP[marker.stop],
+  assignedStop: STOP_ROLE_MAP[marker.stop],
   order: marker.order,
   lat: marker.lat,
   lng: marker.lng,
@@ -24,6 +25,7 @@ const publicUser = (user) => ({
   username: user.username,
   mobileNumber: user.mobileNumber,
   role: user.role,
+  assignedStop: user.entryTeam?.assignedStop || user.entryTeam?.role || user.role,
   entryTeam: user.entryTeam,
 });
 
@@ -42,16 +44,26 @@ const getMemberById = async (id) =>
     role: { $in: entryTeamRoles },
   });
 
-const findEntryTeam = ({ entryTeamId, entryTeamName, entryTeamStop }) => {
-  const normalizedId = entryTeamId?.toLowerCase().trim();
+const normalizeEntryTeamValue = (value) => {
+  if (value === undefined || value === null) return undefined;
+
+  const normalized = value.toString().toLowerCase().trim();
+  return normalized.replace(/[\s_-]+/g, '') === 'dubaifreezone' ? 'dubai' : normalized;
+};
+
+const findEntryTeam = ({ entryTeamId, entryTeamName, entryTeamStop, assignedStop }) => {
+  const normalizedId = normalizeEntryTeamValue(entryTeamId);
   const normalizedName = entryTeamName?.toLowerCase().trim();
   const normalizedStop = entryTeamStop?.toLowerCase().trim();
+  const normalizedAssignedStop = normalizeEntryTeamValue(assignedStop);
 
   return entryTeams.find(
     (team) =>
       team.id === normalizedId ||
       team.name.toLowerCase() === normalizedName ||
-      team.stop.toLowerCase() === normalizedStop
+      team.stop.toLowerCase() === normalizedStop ||
+      team.assignedStop === normalizedAssignedStop ||
+      team.role === normalizedAssignedStop
   );
 };
 
@@ -122,7 +134,8 @@ const createAdmin = async (req, res, next) => {
 
 const createMember = async (req, res, next) => {
   try {
-    const { name, mobileNumber, username, password, entryTeamId, entryTeamName, entryTeamStop } = req.body;
+    const { name, mobileNumber, username, password, entryTeamId, entryTeamName, entryTeamStop, assignedStop } =
+      req.body;
 
     if (!name || !mobileNumber || !username || !password) {
       return res.status(400).json({
@@ -131,7 +144,7 @@ const createMember = async (req, res, next) => {
       });
     }
 
-    const entryTeam = findEntryTeam({ entryTeamId, entryTeamName, entryTeamStop });
+    const entryTeam = findEntryTeam({ entryTeamId, entryTeamName, entryTeamStop, assignedStop });
 
     if (!entryTeam) {
       return res.status(400).json({
@@ -165,13 +178,13 @@ const createMember = async (req, res, next) => {
 
 const getMembers = async (req, res, next) => {
   try {
-    const { entryTeamId, entryTeamStop, role } = req.query;
+    const { entryTeamId, entryTeamStop, role, assignedStop } = req.query;
     const query = {
       role: { $in: entryTeamRoles },
       isActive: true,
     };
 
-    const entryTeam = findEntryTeam({ entryTeamId, entryTeamStop });
+    const entryTeam = findEntryTeam({ entryTeamId, entryTeamStop, assignedStop });
 
     if (entryTeam) {
       query.role = entryTeam.role;
@@ -226,7 +239,17 @@ const updateMember = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Member not found' });
     }
 
-    const { name, mobileNumber, username, password, entryTeamId, entryTeamName, entryTeamStop, isActive } = req.body;
+    const {
+      name,
+      mobileNumber,
+      username,
+      password,
+      entryTeamId,
+      entryTeamName,
+      entryTeamStop,
+      assignedStop,
+      isActive,
+    } = req.body;
 
     if (name !== undefined) {
       if (!name.trim()) {
@@ -266,8 +289,13 @@ const updateMember = async (req, res, next) => {
       member.password = password;
     }
 
-    if (entryTeamId !== undefined || entryTeamName !== undefined || entryTeamStop !== undefined) {
-      const entryTeam = findEntryTeam({ entryTeamId, entryTeamName, entryTeamStop });
+    if (
+      entryTeamId !== undefined ||
+      entryTeamName !== undefined ||
+      entryTeamStop !== undefined ||
+      assignedStop !== undefined
+    ) {
+      const entryTeam = findEntryTeam({ entryTeamId, entryTeamName, entryTeamStop, assignedStop });
 
       if (!entryTeam) {
         return res.status(400).json({

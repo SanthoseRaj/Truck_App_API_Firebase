@@ -7,13 +7,16 @@ const swaggerUi = require('swagger-ui-express');
 
 const connectDB = require('./config/db');
 const swaggerSpec = require('./config/swagger');
+const ensureTruckIndexes = require('./utils/ensureTruckIndexes');
 const ensureShipIndexes = require('./utils/ensureShipIndexes');
 const ensureDriverIndexes = require('./utils/ensureDriverIndexes');
+const ensureSupplierIndexes = require('./utils/ensureSupplierIndexes');
 const seedUsers = require('./utils/seedUsers');
 const authRoutes = require('./routes/authRoutes');
 const truckRoutes = require('./routes/truckRoutes');
 const shipRoutes = require('./routes/shipRoutes');
 const driverRoutes = require('./routes/driverRoutes');
+const supplierRoutes = require('./routes/supplierRoutes');
 const truckEntryRoutes = require('./routes/truckEntryRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
@@ -79,6 +82,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/trucks', truckRoutes);
 app.use('/api/ships', shipRoutes);
 app.use('/api/drivers', driverRoutes);
+app.use('/api/suppliers', supplierRoutes);
 app.use('/api/truck-entries', truckEntryRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/dashboard', dashboardRoutes);
@@ -109,8 +113,10 @@ app.use(errorHandler);
 
 connectDB()
   .then(async () => {
+    await ensureTruckIndexes();
     await ensureShipIndexes();
     await ensureDriverIndexes();
+    await ensureSupplierIndexes();
     await seedUsers();
     console.log('Firebase Function database connected');
   })

@@ -1,17 +1,26 @@
 const mongoose = require('mongoose');
 const Ship = require('../models/Ship');
+const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
+const { resolveActiveSupplierForEntry } = require('../services/supplierService');
 const { normalizeDestination } = require('../utils/destination');
+const {
+  workflowRoles,
+  normalizeStop,
+  getWorkflowStopsForDestination,
+  getNextStopForDestination,
+} = require('../utils/workflow');
 const {
   formatSelectedLocalDateTime,
   parseSelectedLocalDateTime,
   selectedLocalDateTimeFromDate,
 } = require('../utils/selectedLocalDateTime');
+const { buildDashboardCounts } = require('./publicDashboardController');
 
 const requiredFields = [
+  'truckId',
   'headTruckNumber',
   'tailTrailerNumber',
-  'supplierName',
   'shipId',
   'shipName',
   'shipNumber',
@@ -25,7 +34,6 @@ const requiredFields = [
 
 const stringFields = requiredFields.filter((field) => field !== 'tripTime');
 const adminRoles = ['owner', 'admin'];
-const workflowStops = ['yard', 'gate', 'port', 'clearence', 'dubai'];
 const originStops = ['yard', 'gate'];
 
 const normalizeUpper = (value) => value.trim().toUpperCase();
@@ -38,16 +46,10 @@ const normalizeOriginStop = (originStop) => {
   return originStop.toString().trim().toLowerCase();
 };
 const getOriginStop = (truckEntry) => truckEntry.originStop || 'yard';
-const getWorkflowStops = (truckEntry) => {
-  const originIndex = workflowStops.indexOf(getOriginStop(truckEntry));
-
-  return originIndex >= 0 ? workflowStops.slice(originIndex) : workflowStops;
-};
-const getNextRouteStop = (stop) => {
-  const index = workflowStops.indexOf(stop);
-
-  return index >= 0 && index < workflowStops.length - 1 ? workflowStops[index + 1] : null;
-};
+const getWorkflowStops = (truckEntry) =>
+  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+const getNextRouteStop = (stop, truckEntry) =>
+  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
 
 const validateRequiredFields = (body) => {
   const missingField = requiredFields.find((field) => {
@@ -69,8 +71,8 @@ const validateRequiredFields = (body) => {
     return 'tripTime must be a valid number';
   }
 
-  if (!['threeAxis', 'sixAxis'].includes(body.truckModel)) {
-    return 'truckModel must be either threeAxis or sixAxis';
+  if (!['sixAxis', 'fourAxis'].includes(body.truckModel)) {
+    return 'truckModel must be either sixAxis or fourAxis';
   }
 
   if (!normalizeDestination(body.destination)) {
@@ -87,7 +89,11 @@ const validateRequiredFields = (body) => {
 const getTeamName = (user) => user.entryTeam?.name || (user.role === 'yard' ? 'Yard Entry Team' : user.role);
 
 const hasUpdate = (truckEntry, stop, status) =>
-  truckEntry.updates.some((update) => normalizeText(update.stop) === stop && normalizeText(update.status) === status);
+  truckEntry.updates.some(
+    (update) =>
+      normalizeStop(update.stop, normalizeDestination(truckEntry.destination)) === stop &&
+      normalizeText(update.status) === status
+  );
 
 const getWorkflowState = (truckEntry) => {
   for (const stop of getWorkflowStops(truckEntry)) {
@@ -129,11 +135,14 @@ const getWorkflowState = (truckEntry) => {
 
 const serializeTruckEntry = (truckEntry) => {
   const entry = truckEntry.toObject ? truckEntry.toObject() : truckEntry;
+  const destination = normalizeDestination(entry.destination);
   const updates = entry.updates.map((update) => {
     const { destination, ...serializedUpdate } = update;
     const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
+    const stop = normalizeStop(update.stop, normalizeDestination(entry.destination));
     return {
       ...serializedUpdate,
+      stop,
       updatedAt: selectedAt,
       crossedAt: selectedAt,
       ...(normalizeText(update.status) === 'entry' ? { entryAt: selectedAt } : {}),
@@ -149,12 +158,14 @@ const serializeTruckEntry = (truckEntry) => {
   const latestStop = normalizeText(latestUpdate?.stop) || null;
   const latestStatus = normalizeText(latestUpdate?.status) || null;
   const currentStatus = workflowState.workflowStatus === 'completed' ? 'completed' : latestStatus;
-  const nextStop = workflowState.workflowStatus === 'completed' ? null : getNextRouteStop(latestStop);
+  const nextStop = workflowState.workflowStatus === 'completed' ? null : getNextRouteStop(latestStop, entry);
 
   return {
     ...entry,
     id: entry._id,
-    destination: normalizeDestination(entry.destination),
+    destination,
+    dubaiFreeZoneDestination: destination,
+    destinationType: destination,
     originStop: getOriginStop(entry),
     updates,
     ...(yardEntry ? { entryAt: yardEntry.updatedAt } : {}),
@@ -217,8 +228,32 @@ const createTruckEntry = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Ship not found' });
     }
 
+    if (!mongoose.isValidObjectId(body.truckId)) {
+      return res.status(404).json({ success: false, message: 'Truck not found' });
+    }
+
+    const truck = await Truck.findOne({ _id: body.truckId, isActive: true });
+    if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
+
+    if (
+      normalizeUpper(body.headTruckNumber) !== truck.headTruckNumber ||
+      normalizeUpper(body.tailTrailerNumber) !== truck.tailTrailerNumber ||
+      body.truckModel !== truck.truckModel
+    ) {
+      return res.status(400).json({ success: false, message: 'Truck details do not match selected truck' });
+    }
+
     const ship = await Ship.findById(body.shipId);
     if (!ship) return res.status(404).json({ success: false, message: 'Ship not found' });
+
+    const supplierResult = await resolveActiveSupplierForEntry(body);
+    if (supplierResult.error) {
+      return res
+        .status(supplierResult.error.status)
+        .json({ success: false, message: supplierResult.error.message });
+    }
+
+    const supplier = supplierResult.supplier;
 
     const headTruckNumber = normalizeUpper(body.headTruckNumber);
     const tailTrailerNumber = normalizeUpper(body.tailTrailerNumber);
@@ -250,9 +285,11 @@ const createTruckEntry = async (req, res, next) => {
     }
 
     const truckEntry = await TruckEntry.create({
+      truckId: truck._id,
       headTruckNumber,
       tailTrailerNumber,
-      supplierName: body.supplierName.trim(),
+      supplierId: supplier._id,
+      supplierName: supplier.supplierName,
       shipId: ship._id,
       shipName: body.shipName.trim(),
       shipNumber: normalizeUpper(body.shipNumber),
@@ -287,7 +324,10 @@ const createTruckEntry = async (req, res, next) => {
 const getTruckEntries = async (req, res, next) => {
   try {
     const truckEntries = await TruckEntry.find().populate('shipId', 'shipName shipNumber').sort('-createdAt');
-    return res.status(200).json({ truckEntries: truckEntries.map(serializeTruckEntry) });
+    const serializedTruckEntries = truckEntries.map(serializeTruckEntry);
+    const counts = buildDashboardCounts(serializedTruckEntries);
+
+    return res.status(200).json({ counts, truckEntries: serializedTruckEntries });
   } catch (error) {
     next(error);
   }
@@ -310,15 +350,17 @@ const getTruckEntryById = async (req, res, next) => {
 
 const validateWorkflowUpdate = (truckEntry, userRole, action) => {
   const workflowState = getWorkflowState(truckEntry);
+  const workflowStops = getWorkflowStops(truckEntry);
 
   if (workflowState.workflowStatus === 'completed') {
     return { status: 400, message: 'Truck entry workflow is already completed' };
   }
 
-  const userStopIndex = workflowStops.indexOf(userRole);
+  const normalizedUserRole = normalizeStop(userRole, normalizeDestination(truckEntry.destination));
+  const userStopIndex = workflowStops.indexOf(normalizedUserRole);
   const allowedStopIndex = workflowStops.indexOf(workflowState.currentAllowedRole);
 
-  if (userStopIndex === -1) {
+  if (userStopIndex === -1 || !workflowRoles.includes(normalizedUserRole)) {
     return { status: 403, message: 'You do not have permission' };
   }
 
@@ -326,12 +368,12 @@ const validateWorkflowUpdate = (truckEntry, userRole, action) => {
     return { status: 400, message: 'Previous stop is not completed' };
   }
 
-  if (workflowState.currentAllowedRole !== userRole) {
+  if (workflowState.currentAllowedRole !== normalizedUserRole) {
     return { status: 403, message: 'You do not have permission' };
   }
 
   if (action === 'entry' && workflowState.currentAction !== 'entry') {
-    return { status: 400, message: `${userRole} entry already exists` };
+    return { status: 400, message: `${normalizedUserRole} entry already exists` };
   }
 
   if (action === 'exit' && workflowState.currentAction === 'entry') {
@@ -339,7 +381,7 @@ const validateWorkflowUpdate = (truckEntry, userRole, action) => {
   }
 
   if (action === 'exit' && workflowState.currentAction !== 'exit') {
-    return { status: 400, message: `${userRole} exit already exists` };
+    return { status: 400, message: `${normalizedUserRole} exit already exists` };
   }
 
   return null;
@@ -414,7 +456,7 @@ const appendWorkflowUpdate = async (req, res, next, action) => {
     }
 
     truckEntry.updates.push({
-      stop: req.user.role,
+      stop: normalizeStop(req.user.role, normalizeDestination(truckEntry.destination)),
       status: action,
       updatedAt,
       teamName: getTeamName(req.user),

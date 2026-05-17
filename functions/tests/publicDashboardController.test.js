@@ -95,8 +95,9 @@ assert.strictEqual(publicEntries[3].currentAllowedRole, null);
 assert.strictEqual(publicEntries[3].currentAction, null);
 
 assert.deepStrictEqual(counts, {
-  totalActive: 3,
-  moving: 1,
+  totalActive: 4,
+  totalTrucks: 4,
+  moving: 2,
   exitedDubai: 1,
   stops: {
     yard: 1,
@@ -104,12 +105,16 @@ assert.deepStrictEqual(counts, {
     port: 0,
     clearence: 0,
     dubai: 0,
+    freezone: 0,
   },
   routes: {
     yardToGate: 1,
     gateToPort: 0,
     portToClearence: 0,
     clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 1,
+    freezoneToGate: 0,
   },
 });
 
@@ -188,7 +193,8 @@ assert.strictEqual(selectedDateEntries[1].currentStop, 'yard');
 assert.strictEqual(selectedDateEntries[1].currentStatus, 'exit');
 assert.deepStrictEqual(buildDashboardCounts(selectedDateEntries, { dateScoped: true }), {
   totalActive: 3,
-  moving: 1,
+  totalTrucks: 3,
+  moving: 2,
   exitedDubai: 1,
   stops: {
     yard: 1,
@@ -196,12 +202,16 @@ assert.deepStrictEqual(buildDashboardCounts(selectedDateEntries, { dateScoped: t
     port: 0,
     clearence: 0,
     dubai: 0,
+    freezone: 0,
   },
   routes: {
     yardToGate: 1,
     gateToPort: 0,
     portToClearence: 0,
     clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 1,
+    freezoneToGate: 0,
   },
 });
 
@@ -225,7 +235,7 @@ const gateOriginFreeZoneEntry = serializePublicTruckEntry({
 assert.strictEqual(gateOriginFreeZoneEntry.destination, 'freezone');
 assert.strictEqual(gateOriginFreeZoneEntry.originStop, 'gate');
 assert.strictEqual(gateOriginFreeZoneEntry.workflowStatus, 'completed');
-assert.strictEqual(gateOriginFreeZoneEntry.currentStop, 'dubai');
+assert.strictEqual(gateOriginFreeZoneEntry.currentStop, 'freezone');
 assert.strictEqual(gateOriginFreeZoneEntry.currentStatus, 'completed');
 
 console.log('public dashboard controller tests passed');

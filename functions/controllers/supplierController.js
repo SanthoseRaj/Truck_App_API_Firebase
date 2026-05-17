@@ -1,0 +1,63 @@
+const {
+  listSuppliers,
+  createSupplier: createSupplierRecord,
+  updateSupplier: updateSupplierRecord,
+  deactivateSupplier: deactivateSupplierRecord,
+  getDuplicateSupplierMessage,
+} = require('../services/supplierService');
+
+const getSuppliers = async (req, res, next) => {
+  try {
+    const result = await listSuppliers(req.query, req.user);
+    if (result.error) return res.status(result.statusCode).json({ success: false, message: result.error });
+
+    return res.json({ success: true, data: result.suppliers });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createSupplier = async (req, res, next) => {
+  try {
+    const result = await createSupplierRecord(req.body);
+    if (result.error) return res.status(result.statusCode).json({ success: false, message: result.error });
+
+    return res.status(201).json({ success: true, data: result.supplier });
+  } catch (error) {
+    const duplicateMessage = getDuplicateSupplierMessage(error);
+    if (duplicateMessage) return res.status(409).json({ success: false, message: duplicateMessage });
+    next(error);
+  }
+};
+
+const updateSupplier = async (req, res, next) => {
+  try {
+    const result = await updateSupplierRecord(req.params.id, req.body);
+    if (result.notFound) return res.status(404).json({ success: false, message: 'Supplier not found' });
+    if (result.error) return res.status(result.statusCode).json({ success: false, message: result.error });
+
+    return res.json({ success: true, data: result.supplier });
+  } catch (error) {
+    const duplicateMessage = getDuplicateSupplierMessage(error);
+    if (duplicateMessage) return res.status(409).json({ success: false, message: duplicateMessage });
+    next(error);
+  }
+};
+
+const deleteSupplier = async (req, res, next) => {
+  try {
+    const supplier = await deactivateSupplierRecord(req.params.id);
+    if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
+
+    return res.json({ success: true, data: supplier });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getSuppliers,
+  createSupplier,
+  updateSupplier,
+  deleteSupplier,
+};
