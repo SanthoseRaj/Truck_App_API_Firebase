@@ -16,6 +16,7 @@ router.use(protect);
 
 router.get('/', allowRoles(...supplierReaders), getSuppliers);
 router.post('/', allowRoles(...supplierManagers), createSupplier);
+router.put('/:id', allowRoles(...supplierManagers), updateSupplier);
 router.patch('/:id', allowRoles(...supplierManagers), updateSupplier);
 router.delete('/:id', allowRoles(...supplierManagers), deleteSupplier);
 
