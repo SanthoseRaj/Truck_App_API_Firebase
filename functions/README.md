@@ -85,5 +85,5 @@ These users are seeded automatically on server start if they do not already exis
 
 - Credentials are never hardcoded. Set `MONGO_URI` in `.env`.
 - Default user passwords are hashed with bcrypt before storage.
-- Truck deletion is a soft delete using `isActive: false`.
+- Truck deletion removes the truck document and matching truck entry documents.
 - When Yard or Admin creates a truck with an existing `truckNumber`, the existing truck is reused, `tripCount` increments, and a new trip record is created.

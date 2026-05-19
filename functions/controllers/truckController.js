@@ -157,7 +157,7 @@ const deleteTruck = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Truck not found' });
     }
 
-    const truck = await Truck.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    const truck = await Truck.findByIdAndDelete(req.params.id);
 
     if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
 
@@ -172,7 +172,7 @@ const deleteTruck = async (req, res, next) => {
     });
 
     return res.status(200).json({
-      message: 'Truck deactivated successfully',
+      message: 'Truck deleted successfully',
       truck: serializeTruck(truck),
       deletedTruckEntries: deletedEntries.deletedCount,
     });

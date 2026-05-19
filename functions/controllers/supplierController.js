@@ -2,7 +2,7 @@ const {
   listSuppliers,
   createSupplier: createSupplierRecord,
   updateSupplier: updateSupplierRecord,
-  deactivateSupplier: deactivateSupplierRecord,
+  deleteSupplier: deleteSupplierRecord,
 } = require('../services/supplierService');
 
 const getSuppliers = async (req, res, next) => {
@@ -41,7 +41,7 @@ const updateSupplier = async (req, res, next) => {
 
 const deleteSupplier = async (req, res, next) => {
   try {
-    const supplier = await deactivateSupplierRecord(req.params.id);
+    const supplier = await deleteSupplierRecord(req.params.id);
     if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found' });
 
     return res.json({ success: true, data: supplier });

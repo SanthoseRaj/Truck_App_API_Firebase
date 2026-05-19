@@ -96,7 +96,7 @@ router.put('/:id', allowRoles(...truckManagers), updateTruck);
  * @swagger
  * /api/trucks/{id}:
  *   delete:
- *     summary: Deactivate truck master record
+ *     summary: Delete truck master record
  *     tags: [Trucks]
  *     security:
  *       - bearerAuth: []
@@ -108,7 +108,7 @@ router.put('/:id', allowRoles(...truckManagers), updateTruck);
  *           type: string
  *     responses:
  *       200:
- *         description: Truck deactivated
+ *         description: Truck deleted
  *       404:
  *         description: Truck not found
  */

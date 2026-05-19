@@ -112,17 +112,10 @@ const updateSupplier = async (id, body = {}) => {
   return { supplier: serializeSupplier(supplier) };
 };
 
-const deactivateSupplier = async (id) => {
+const deleteSupplier = async (id) => {
   if (!mongoose.isValidObjectId(id)) return null;
 
-  const supplier = await Supplier.findByIdAndUpdate(
-    id,
-    { isActive: false },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
+  const supplier = await Supplier.findByIdAndDelete(id);
 
   return supplier ? serializeSupplier(supplier) : null;
 };
@@ -157,7 +150,7 @@ module.exports = {
   listSuppliers,
   createSupplier,
   updateSupplier,
-  deactivateSupplier,
+  deleteSupplier,
   resolveActiveSupplierForEntry,
   serializeSupplier,
   validateSupplierInput,

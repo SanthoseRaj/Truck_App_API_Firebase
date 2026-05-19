@@ -1,12 +1,18 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+const extractBearerToken = (authHeader = '') => {
+  const [scheme, ...tokenParts] = authHeader.trim().split(/\s+/);
+  if (!/^Bearer$/i.test(scheme) || tokenParts.length === 0) return null;
+
+  return tokenParts.join(' ').trim().replace(/^"+|"+$/g, '');
+};
+
 const protect = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization || '';
-    const [scheme, token] = authHeader.split(' ');
+    const token = extractBearerToken(req.headers.authorization || '');
 
-    if (scheme !== 'Bearer' || !token) {
+    if (!token) {
       return res.status(401).json({ success: false, message: 'Not authorized, token missing' });
     }
 
