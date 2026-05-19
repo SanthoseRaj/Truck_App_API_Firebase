@@ -10,7 +10,7 @@ const { allowRoles } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 const truckReaders = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
-const truckManagers = ['owner', 'admin'];
+const truckManagers = ['owner', 'admin', 'yard', 'gate'];
 
 router.use(protect);
 
@@ -28,7 +28,7 @@ router.use(protect);
  *         schema:
  *           type: boolean
  *         required: false
- *         description: Owner/admin only. Include inactive trucks when true.
+ *         description: Owner/admin/yard/gate only. Include inactive trucks when true.
  *     responses:
  *       200:
  *         description: List of trucks
@@ -90,6 +90,7 @@ router.post('/', allowRoles(...truckManagers), createTruck);
  *         description: Duplicate head truck number
  */
 router.patch('/:id', allowRoles(...truckManagers), updateTruck);
+router.put('/:id', allowRoles(...truckManagers), updateTruck);
 
 /**
  * @swagger

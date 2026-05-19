@@ -1,33 +1,47 @@
 const Truck = require('../models/Truck');
 const Trip = require('../models/Trip');
+const TruckEntry = require('../models/TruckEntry');
 const { STOPS, ROUTE_MARKERS, ROUTE_LINES } = require('../constants/stops');
+const { serializeTruckEntry } = require('./truckEntryController');
+const { getDashboardRouteLabelsForTruckEntry } = require('../utils/dashboardRouteGrouping');
+
+const getRouteForTruckEntry = (truckEntry) => {
+  if (!['exit', 'moving'].includes(truckEntry.currentStatus)) return null;
+
+  return getDashboardRouteLabelsForTruckEntry(truckEntry);
+};
+
+const getActiveTruckEntries = () =>
+  TruckEntry.find({
+    isDeleted: { $ne: true },
+    $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
+  }).sort('-createdAt');
+
+const buildRouteStatsFromTruckEntries = (truckEntries) =>
+  ROUTE_LINES.map(({ from, to }) => {
+    const trucks = truckEntries.filter((truckEntry) => {
+      const route = getRouteForTruckEntry(truckEntry);
+      return route?.from === from && route?.to === to;
+    });
+
+    return {
+      from,
+      to,
+      count: trucks.length,
+      truckNumbers: trucks.map((truck) => truck.headTruckNumber),
+      trucks,
+    };
+  });
 
 const buildRouteStats = async () => {
-  const routes = await Promise.all(
-    ROUTE_LINES.map(async ({ from, to }) => {
-      const trucks = await Truck.find({
-        isActive: true,
-        currentStop: to,
-        status: 'in_transit',
-      }).select('truckNumber currentStop status');
-
-      return {
-        from,
-        to,
-        count: trucks.length,
-        truckNumbers: trucks.map((truck) => truck.truckNumber),
-      };
-    })
-  );
-
-  return routes;
+  const truckEntries = (await getActiveTruckEntries()).map(serializeTruckEntry);
+  return buildRouteStatsFromTruckEntries(truckEntries);
 };
 
 const getSummary = async (req, res, next) => {
   try {
-    const [totalTrucks, movingTrucks, completedTrips, groupedStops, routes] = await Promise.all([
+    const [totalTrucks, completedTrips, groupedStops, routes] = await Promise.all([
       Truck.countDocuments({ isActive: true }),
-      Truck.countDocuments({ isActive: true, status: 'in_transit' }),
       Trip.countDocuments({ status: 'completed' }),
       Truck.aggregate([
         { $match: { isActive: true } },
@@ -46,10 +60,10 @@ const getSummary = async (req, res, next) => {
       success: true,
       data: {
         totalTrucks,
-        movingTrucks,
+        movingTrucks: routes.reduce((total, route) => total + route.count, 0),
         completedTrips,
         trucksByStop,
-        trucksInTransit: movingTrucks,
+        trucksInTransit: routes.reduce((total, route) => total + route.count, 0),
         routes,
       },
     });
@@ -88,11 +102,9 @@ const getRouteTrucks = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid from or to stop' });
     }
 
-    const trucks = await Truck.find({
-      isActive: true,
-      currentStop: to,
-      status: 'in_transit',
-    });
+    const routes = await buildRouteStats();
+    const route = routes.find((item) => item.from === from && item.to === to);
+    const trucks = route?.trucks || [];
 
     return res.json({
       success: true,
@@ -112,4 +124,6 @@ module.exports = {
   getSummary,
   getMap,
   getRouteTrucks,
+  buildRouteStatsFromTruckEntries,
+  getRouteForTruckEntry,
 };

@@ -4,6 +4,10 @@ const {
   profile,
   getEntryTeams,
   createAdmin,
+  getAdmins,
+  getAdminProfile,
+  updateAdmin,
+  deleteAdmin,
   createMember,
   getMembers,
   getMemberProfile,
@@ -86,6 +90,14 @@ router.get('/entry-teams', protect, allowRoles('owner', 'admin'), getEntryTeams)
  *         description: Username already exists
  */
 router.post('/admins', protect, allowRoles('owner'), createAdmin);
+
+router.get('/admins', protect, allowRoles('owner'), getAdmins);
+
+router.get('/admins/:id', protect, allowRoles('owner'), getAdminProfile);
+
+router.put('/admins/:id', protect, allowRoles('owner'), updateAdmin);
+
+router.delete('/admins/:id', protect, allowRoles('owner'), deleteAdmin);
 
 /**
  * @swagger

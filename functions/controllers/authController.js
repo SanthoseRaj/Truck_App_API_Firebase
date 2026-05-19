@@ -38,10 +38,40 @@ const fullUser = (user) => ({
 
 const normalizeUsername = (username) => username.toLowerCase().trim();
 
+const buildDeletedUsername = (username, id) => `${username}__deleted__${id}`;
+
+const releaseInactiveUsername = async (username) => {
+  const inactiveUsers = await User.find({
+    username,
+    isActive: false,
+  });
+
+  if (!inactiveUsers.length) return;
+
+  await User.bulkWrite(
+    inactiveUsers.map((user) => {
+      const deletedUsername = buildDeletedUsername(user.username, user._id);
+
+      return {
+        updateOne: {
+          filter: { _id: user._id },
+          update: { $set: { username: deletedUsername } },
+        },
+      };
+    })
+  );
+};
+
 const getMemberById = async (id) =>
   User.findOne({
     _id: id,
     role: { $in: entryTeamRoles },
+  });
+
+const getAdminById = async (id) =>
+  User.findOne({
+    _id: id,
+    role: 'admin',
   });
 
 const normalizeEntryTeamValue = (value) => {
@@ -132,6 +162,126 @@ const createAdmin = async (req, res, next) => {
   }
 };
 
+const getAdmins = async (req, res, next) => {
+  try {
+    const admins = await User.find({ role: 'admin' }).sort({ name: 1 });
+
+    return res.json({
+      success: true,
+      count: admins.length,
+      admins: admins.map(publicUser),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAdminProfile = async (req, res, next) => {
+  try {
+    const admin = await getAdminById(req.params.id);
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    return res.json({ success: true, admin: fullUser(admin) });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid admin id' });
+    }
+
+    next(error);
+  }
+};
+
+const updateAdmin = async (req, res, next) => {
+  try {
+    const admin = await getAdminById(req.params.id);
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    const { name, mobileNumber, username, password, isActive } = req.body;
+
+    if (name !== undefined) {
+      if (!name.trim()) {
+        return res.status(400).json({ success: false, message: 'Admin name cannot be empty' });
+      }
+
+      admin.name = name.trim();
+    }
+
+    if (mobileNumber !== undefined) {
+      admin.mobileNumber = mobileNumber.trim();
+    }
+
+    if (username !== undefined) {
+      if (!username.trim()) {
+        return res.status(400).json({ success: false, message: 'Username cannot be empty' });
+      }
+
+      const normalizedUsername = normalizeUsername(username);
+      const exists = await User.exists({
+        _id: { $ne: admin._id },
+        username: normalizedUsername,
+      });
+
+      if (exists) {
+        return res.status(409).json({ success: false, message: 'Username already exists' });
+      }
+
+      admin.username = normalizedUsername;
+    }
+
+    if (password !== undefined) {
+      if (!password || password.length < 6) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+      }
+
+      admin.password = password;
+    }
+
+    if (isActive !== undefined) {
+      admin.isActive = Boolean(isActive);
+    }
+
+    await admin.save();
+
+    return res.json({ success: true, admin: fullUser(admin) });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid admin id' });
+    }
+
+    next(error);
+  }
+};
+
+const deleteAdmin = async (req, res, next) => {
+  try {
+    const admin = await getAdminById(req.params.id);
+
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Admin not found' });
+    }
+
+    await admin.deleteOne();
+
+    return res.json({
+      success: true,
+      message: 'Admin deleted successfully',
+      admin: fullUser(admin),
+    });
+  } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(400).json({ success: false, message: 'Invalid admin id' });
+    }
+
+    next(error);
+  }
+};
+
 const createMember = async (req, res, next) => {
   try {
     const { name, mobileNumber, username, password, entryTeamId, entryTeamName, entryTeamStop, assignedStop } =
@@ -154,11 +304,13 @@ const createMember = async (req, res, next) => {
     }
 
     const normalizedUsername = normalizeUsername(username);
-    const exists = await User.exists({ username: normalizedUsername });
+    const exists = await User.exists({ username: normalizedUsername, isActive: true });
 
     if (exists) {
       return res.status(409).json({ success: false, message: 'Username already exists' });
     }
+
+    await releaseInactiveUsername(normalizedUsername);
 
     const member = await User.create({
       name: name.trim(),
@@ -332,8 +484,7 @@ const deleteMember = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Member not found' });
     }
 
-    member.isActive = false;
-    await member.save();
+    await member.deleteOne();
 
     return res.json({
       success: true,
@@ -362,6 +513,10 @@ module.exports = {
   profile,
   getEntryTeams,
   createAdmin,
+  getAdmins,
+  getAdminProfile,
+  updateAdmin,
+  deleteAdmin,
   createMember,
   getMembers,
   getMemberProfile,

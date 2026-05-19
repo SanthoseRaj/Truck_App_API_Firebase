@@ -3,7 +3,6 @@ const {
   createSupplier: createSupplierRecord,
   updateSupplier: updateSupplierRecord,
   deactivateSupplier: deactivateSupplierRecord,
-  getDuplicateSupplierMessage,
 } = require('../services/supplierService');
 
 const getSuppliers = async (req, res, next) => {
@@ -24,8 +23,6 @@ const createSupplier = async (req, res, next) => {
 
     return res.status(201).json({ success: true, data: result.supplier });
   } catch (error) {
-    const duplicateMessage = getDuplicateSupplierMessage(error);
-    if (duplicateMessage) return res.status(409).json({ success: false, message: duplicateMessage });
     next(error);
   }
 };
@@ -38,8 +35,6 @@ const updateSupplier = async (req, res, next) => {
 
     return res.json({ success: true, data: result.supplier });
   } catch (error) {
-    const duplicateMessage = getDuplicateSupplierMessage(error);
-    if (duplicateMessage) return res.status(409).json({ success: false, message: duplicateMessage });
     next(error);
   }
 };

@@ -64,22 +64,6 @@ const buildSupplierListQuery = (queryParams = {}, user = {}) => {
   return { query };
 };
 
-const getDuplicateSupplierMessage = (error) => {
-  if (error.code !== 11000) return null;
-  return 'Supplier name already exists';
-};
-
-const ensureUniqueSupplierName = async (name, excludedSupplierId) => {
-  const key = supplierNameKey(name);
-  if (!key) return null;
-
-  const query = { supplierNameKey: key };
-  if (excludedSupplierId) query._id = { $ne: excludedSupplierId };
-
-  const duplicate = await Supplier.findOne(query).select('_id');
-  return duplicate ? 'Supplier name already exists' : null;
-};
-
 const listSuppliers = async (queryParams, user) => {
   const { query, error } = buildSupplierListQuery(queryParams, user);
   if (error) return { error, statusCode: 400 };
@@ -100,9 +84,6 @@ const createSupplier = async (body = {}) => {
     isActive: true,
   };
 
-  const duplicateError = await ensureUniqueSupplierName(payload.supplierName);
-  if (duplicateError) return { error: duplicateError, statusCode: 409 };
-
   const supplier = await Supplier.create(payload);
   return { supplier: serializeSupplier(supplier) };
 };
@@ -121,11 +102,6 @@ const updateSupplier = async (id, body = {}) => {
   if ('companyName' in body) updates.companyName = trimString(body.companyName);
   if ('contactNumber' in body) updates.contactNumber = trimString(body.contactNumber);
   if ('isActive' in body) updates.isActive = body.isActive;
-
-  if (updates.supplierName) {
-    const duplicateError = await ensureUniqueSupplierName(updates.supplierName, id);
-    if (duplicateError) return { error: duplicateError, statusCode: 409 };
-  }
 
   const supplier = await Supplier.findByIdAndUpdate(id, updates, {
     new: true,
@@ -186,6 +162,5 @@ module.exports = {
   serializeSupplier,
   validateSupplierInput,
   buildSupplierListQuery,
-  getDuplicateSupplierMessage,
   supplierNameKey,
 };

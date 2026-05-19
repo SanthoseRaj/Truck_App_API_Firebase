@@ -2,17 +2,15 @@ const TruckEntry = require('../models/TruckEntry');
 const { normalizeDestination } = require('../utils/destination');
 const {
   normalizeStop,
+  requiresEntryForStop,
   getWorkflowStopsForDestination,
   getNextStopForDestination,
   getReturnRouteForDestination,
 } = require('../utils/workflow');
 const { formatSelectedLocalDateTime } = require('../utils/selectedLocalDateTime');
+const { getDashboardCountRouteKeyForTruckEntry } = require('../utils/dashboardRouteGrouping');
+const { normalizeTruckModel } = require('../utils/truckModel');
 
-const routeKeys = {
-  yard: 'yardToGate',
-  gate: 'gateToPort',
-  port: 'portToClearence',
-};
 const dashboardDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const normalizeText = (value) => value?.toString().toLowerCase().trim();
@@ -26,6 +24,9 @@ const hasUpdate = (truckEntry, stop, status) =>
       normalizeStop(update.stop, normalizeDestination(truckEntry.destination)) === stop &&
       normalizeText(update.status) === status
   );
+
+const hasCompletedUpdate = (truckEntry) =>
+  (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'completed');
 
 const getLatestUpdate = (truckEntry, range = null) => {
   if (!truckEntry.updates?.length) return null;
@@ -42,33 +43,34 @@ const getLatestUpdate = (truckEntry, range = null) => {
 const getNextStopForEntry = (stop, truckEntry) =>
   getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
 
-const getRouteKeyForEntry = (stop, truckEntry) => {
-  const normalizedStop = normalizeStop(stop, normalizeDestination(truckEntry.destination));
-
-  if (normalizedStop === 'clearence') {
-    return normalizeDestination(truckEntry.destination) === 'freezone' ? 'clearenceToFreezone' : 'clearenceToDubai';
-  }
-
-  if (normalizedStop === 'dubai') return 'dubaiToYard';
-  if (normalizedStop === 'freezone') return 'freezoneToGate';
-
-  return routeKeys[normalizedStop];
-};
-
 const getWorkflowStatus = (truckEntry) => {
+  if (hasCompletedUpdate(truckEntry)) return 'completed';
+
   const completed = getWorkflowStops(truckEntry).every(
-    (stop) => hasUpdate(truckEntry, stop, 'entry') && hasUpdate(truckEntry, stop, 'exit')
+    (stop) =>
+      (!requiresEntryForStop(stop) || hasUpdate(truckEntry, stop, 'entry')) &&
+      hasUpdate(truckEntry, stop, 'exit')
   );
+
+  if (normalizeDestination(truckEntry.destination) === 'dubai') return 'active';
 
   return completed ? 'completed' : 'active';
 };
 
 const getWorkflowState = (truckEntry) => {
+  if (hasCompletedUpdate(truckEntry)) {
+    return {
+      currentAllowedRole: null,
+      currentAllowedStop: null,
+      currentAction: null,
+    };
+  }
+
   for (const stop of getWorkflowStops(truckEntry)) {
     const entryCompleted = hasUpdate(truckEntry, stop, 'entry');
     const exitCompleted = hasUpdate(truckEntry, stop, 'exit');
 
-    if (!entryCompleted) {
+    if (requiresEntryForStop(stop) && !entryCompleted) {
       return {
         currentAllowedRole: stop,
         currentAllowedStop: stop,
@@ -83,6 +85,14 @@ const getWorkflowState = (truckEntry) => {
         currentAction: 'exit',
       };
     }
+  }
+
+  if (normalizeDestination(truckEntry.destination) === 'dubai') {
+    return {
+      currentAllowedRole: 'yard',
+      currentAllowedStop: 'yard',
+      currentAction: null,
+    };
   }
 
   return {
@@ -199,7 +209,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     driverName: entry.driverName,
     driverMobile: entry.driverMobile,
     driverTdCardNumber: entry.driverTdCardNumber,
-    truckModel: entry.truckModel,
+    truckModel: normalizeTruckModel(entry.truckModel) || entry.truckModel,
     destination,
     dubaiFreeZoneDestination: destination,
     destinationType: destination,
@@ -216,6 +226,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
       return {
         stop: normalizeStop(update.stop, destination),
         status,
+        ...(update.destination ? { destination: normalizeDestination(update.destination) } : {}),
         updatedAt: selectedAt,
         teamName: update.teamName,
         memberName: update.memberName,
@@ -267,16 +278,9 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
         truckEntry.currentStatus === 'moving' ||
         truckEntry.currentStatus === 'completed'
       ) {
-        const routeKey =
-          truckEntry.workflowStatus === 'completed' || ['dubai', 'freezone'].includes(truckEntry.currentStop)
-            ? getReturnRouteForDestination(truckEntry.destination)
-            : getRouteKeyForEntry(truckEntry.currentStop, truckEntry);
-        const nextStop =
-          truckEntry.workflowStatus === 'completed' || ['dubai', 'freezone'].includes(truckEntry.currentStop)
-            ? routeKey
-            : getNextStopForEntry(truckEntry.currentStop, truckEntry);
+        const routeKey = getDashboardCountRouteKeyForTruckEntry(truckEntry);
 
-        if (routeKey && nextStop) {
+        if (routeKey) {
           counts.routes[routeKey] += 1;
           counts.moving += 1;
         }
@@ -305,10 +309,9 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
     }
 
     if (truckEntry.currentStatus === 'exit' || truckEntry.currentStatus === 'moving') {
-      const routeKey = getRouteKeyForEntry(truckEntry.currentStop, truckEntry);
-      const nextStop = getNextStopForEntry(truckEntry.currentStop, truckEntry);
+      const routeKey = getDashboardCountRouteKeyForTruckEntry(truckEntry);
 
-      if (routeKey && nextStop) {
+      if (routeKey) {
         counts.routes[routeKey] += 1;
         counts.moving += 1;
       }

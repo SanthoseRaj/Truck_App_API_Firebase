@@ -11,8 +11,7 @@ const { allowRoles } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 const driverReaders = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
-const driverCreators = ['owner', 'admin'];
-const driverEditors = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
+const driverManagers = ['owner', 'admin', 'yard', 'gate'];
 
 router.use(protect);
 
@@ -63,7 +62,7 @@ router.get('/', allowRoles(...driverReaders), getDrivers);
  *       409:
  *         description: Duplicate mobile number or ID number
  */
-router.post('/', allowRoles(...driverCreators), createDriver);
+router.post('/', allowRoles(...driverManagers), createDriver);
 
 /**
  * @swagger
@@ -117,7 +116,7 @@ router.get('/:id', allowRoles(...driverReaders), getDriver);
  *       409:
  *         description: Duplicate mobile number or ID number
  */
-router.put('/:id', allowRoles(...driverEditors), updateDriver);
+router.put('/:id', allowRoles(...driverManagers), updateDriver);
 
 /**
  * @swagger
@@ -139,6 +138,6 @@ router.put('/:id', allowRoles(...driverEditors), updateDriver);
  *       404:
  *         description: Driver not found
  */
-router.delete('/:id', allowRoles(...driverEditors), deleteDriver);
+router.delete('/:id', allowRoles(...driverManagers), deleteDriver);
 
 module.exports = router;

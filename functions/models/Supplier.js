@@ -10,7 +10,6 @@ const supplierSchema = new mongoose.Schema(
     supplierNameKey: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       select: false,
     },
@@ -32,7 +31,7 @@ const supplierSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-supplierSchema.index({ supplierNameKey: 1 }, { unique: true });
+supplierSchema.index({ supplierNameKey: 1 });
 supplierSchema.index({ isActive: 1, supplierName: 1 });
 
 module.exports = mongoose.model('Supplier', supplierSchema);

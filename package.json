@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "node functions/tests/publicDashboardController.test.js && node functions/tests/truckEntryController.test.js && node functions/tests/shipController.test.js && node functions/tests/driverService.test.js && node functions/tests/supplierService.test.js"
+    "test": "node functions/tests/publicDashboardController.test.js && node functions/tests/truckEntryController.test.js && node functions/tests/shipController.test.js && node functions/tests/driverService.test.js && node functions/tests/supplierService.test.js && node functions/tests/authController.test.js"
   },
   "keywords": [
     "truck-tracking",

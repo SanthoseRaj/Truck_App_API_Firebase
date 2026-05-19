@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const Truck = require('../models/Truck');
+const TruckEntry = require('../models/TruckEntry');
+const { normalizeTruckModel } = require('../utils/truckModel');
 
-const TRUCK_MODELS = ['sixAxis', 'fourAxis'];
+const TRUCK_MODEL_ERROR = 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel';
 
 const normalizeUpper = (value) => (value || '').trim().toUpperCase();
 
@@ -9,7 +11,7 @@ const serializeTruck = (truck) => ({
   id: truck._id,
   headTruckNumber: truck.headTruckNumber,
   tailTrailerNumber: truck.tailTrailerNumber,
-  truckModel: truck.truckModel,
+  truckModel: normalizeTruckModel(truck.truckModel) || truck.truckModel,
   isActive: truck.isActive !== false,
   createdAt: truck.createdAt,
   updatedAt: truck.updatedAt,
@@ -27,8 +29,8 @@ const validateTruckInput = (body, options = {}) => {
   }
 
   if (requireAll || 'truckModel' in body) {
-    if (!TRUCK_MODELS.includes(body.truckModel)) {
-      return 'truckModel must be either sixAxis or fourAxis';
+    if (!normalizeTruckModel(body.truckModel)) {
+      return TRUCK_MODEL_ERROR;
     }
   }
 
@@ -73,7 +75,7 @@ const createTruck = async (req, res, next) => {
     const truck = await Truck.create({
       headTruckNumber,
       tailTrailerNumber: normalizeUpper(req.body.tailTrailerNumber),
-      truckModel: req.body.truckModel,
+      truckModel: normalizeTruckModel(req.body.truckModel),
       isActive: typeof req.body.isActive === 'boolean' ? req.body.isActive : true,
       createdBy: req.user._id,
     });
@@ -90,7 +92,7 @@ const createTruck = async (req, res, next) => {
 
 const getTrucks = async (req, res, next) => {
   try {
-    const isManager = ['owner', 'admin'].includes(req.user.role);
+    const isManager = ['owner', 'admin', 'yard', 'gate'].includes(req.user.role);
     const includeInactive = isManager && req.query.includeInactive === 'true';
     const filter = includeInactive ? {} : { isActive: true };
     const trucks = await Truck.find(filter).sort('headTruckNumber');
@@ -129,7 +131,7 @@ const updateTruck = async (req, res, next) => {
     if ('tailTrailerNumber' in req.body) {
       updates.tailTrailerNumber = normalizeUpper(req.body.tailTrailerNumber);
     }
-    if ('truckModel' in req.body) updates.truckModel = req.body.truckModel;
+    if ('truckModel' in req.body) updates.truckModel = normalizeTruckModel(req.body.truckModel);
     if ('isActive' in req.body) updates.isActive = req.body.isActive;
 
     const truck = await Truck.findByIdAndUpdate(req.params.id, updates, {
@@ -159,9 +161,20 @@ const deleteTruck = async (req, res, next) => {
 
     if (!truck) return res.status(404).json({ success: false, message: 'Truck not found' });
 
+    const deletedEntries = await TruckEntry.deleteMany({
+      $or: [
+        { truckId: truck._id },
+        {
+          headTruckNumber: truck.headTruckNumber,
+          tailTrailerNumber: truck.tailTrailerNumber,
+        },
+      ],
+    });
+
     return res.status(200).json({
       message: 'Truck deactivated successfully',
       truck: serializeTruck(truck),
+      deletedTruckEntries: deletedEntries.deletedCount,
     });
   } catch (error) {
     next(error);

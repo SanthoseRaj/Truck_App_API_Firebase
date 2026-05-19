@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { TRUCK_MODEL_DISPLAY_VALUES } = require('../utils/truckModel');
 
 const truckSchema = new mongoose.Schema(
   {
@@ -19,8 +20,8 @@ const truckSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Truck model is required'],
       enum: {
-        values: ['sixAxis', 'fourAxis'],
-        message: 'truckModel must be either sixAxis or fourAxis',
+        values: TRUCK_MODEL_DISPLAY_VALUES,
+        message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel',
       },
     },
     isActive: {

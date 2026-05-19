@@ -4,9 +4,11 @@ const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
 const { resolveActiveSupplierForEntry } = require('../services/supplierService');
 const { normalizeDestination } = require('../utils/destination');
+const { normalizeTruckModel } = require('../utils/truckModel');
 const {
   workflowRoles,
   normalizeStop,
+  requiresEntryForStop,
   getWorkflowStopsForDestination,
   getNextStopForDestination,
 } = require('../utils/workflow');
@@ -71,8 +73,8 @@ const validateRequiredFields = (body) => {
     return 'tripTime must be a valid number';
   }
 
-  if (!['sixAxis', 'fourAxis'].includes(body.truckModel)) {
-    return 'truckModel must be either sixAxis or fourAxis';
+  if (!normalizeTruckModel(body.truckModel)) {
+    return 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel';
   }
 
   if (!normalizeDestination(body.destination)) {
@@ -95,12 +97,31 @@ const hasUpdate = (truckEntry, stop, status) =>
       normalizeText(update.status) === status
   );
 
+const hasCompletedUpdate = (truckEntry) =>
+  truckEntry.updates.some((update) => normalizeText(update.status) === 'completed');
+
+const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
+  normalizeDestination(truckEntry?.destination) === 'dubai' &&
+  hasUpdate(truckEntry, 'clearence', 'exit') &&
+  !hasCompletedUpdate(truckEntry);
+
 const getWorkflowState = (truckEntry) => {
+  if (hasCompletedUpdate(truckEntry)) {
+    return {
+      currentAllowedRole: null,
+      currentAllowedStop: null,
+      currentAction: null,
+      workflowStatus: 'completed',
+      nextRole: null,
+      nextStop: null,
+    };
+  }
+
   for (const stop of getWorkflowStops(truckEntry)) {
     const entryCompleted = hasUpdate(truckEntry, stop, 'entry');
     const exitCompleted = hasUpdate(truckEntry, stop, 'exit');
 
-    if (!entryCompleted) {
+    if (requiresEntryForStop(stop) && !entryCompleted) {
       return {
         currentAllowedRole: stop,
         currentAllowedStop: stop,
@@ -123,6 +144,17 @@ const getWorkflowState = (truckEntry) => {
     }
   }
 
+  if (normalizeDestination(truckEntry.destination) === 'dubai') {
+    return {
+      currentAllowedRole: 'yard',
+      currentAllowedStop: 'yard',
+      currentAction: null,
+      workflowStatus: 'pending',
+      nextRole: 'yard',
+      nextStop: 'yard',
+    };
+  }
+
   return {
     currentAllowedRole: null,
     currentAllowedStop: null,
@@ -137,12 +169,13 @@ const serializeTruckEntry = (truckEntry) => {
   const entry = truckEntry.toObject ? truckEntry.toObject() : truckEntry;
   const destination = normalizeDestination(entry.destination);
   const updates = entry.updates.map((update) => {
-    const { destination, ...serializedUpdate } = update;
+    const { destination: updateDestination, ...serializedUpdate } = update;
     const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
     const stop = normalizeStop(update.stop, normalizeDestination(entry.destination));
     return {
       ...serializedUpdate,
       stop,
+      ...(updateDestination ? { destination: normalizeDestination(updateDestination) } : {}),
       updatedAt: selectedAt,
       crossedAt: selectedAt,
       ...(normalizeText(update.status) === 'entry' ? { entryAt: selectedAt } : {}),
@@ -163,6 +196,7 @@ const serializeTruckEntry = (truckEntry) => {
   return {
     ...entry,
     id: entry._id,
+    truckModel: normalizeTruckModel(entry.truckModel) || entry.truckModel,
     destination,
     dubaiFreeZoneDestination: destination,
     destinationType: destination,
@@ -183,9 +217,41 @@ const getEntriesForTruck = (headTruckNumber, tailTrailerNumber) =>
     tailTrailerNumber,
   }).sort('-createdAt');
 
-const hasOpenTruckEntry = (entries) => entries.some((entry) => getWorkflowState(entry).workflowStatus !== 'completed');
-const getLatestCompletedEntry = (entries) =>
-  entries.find((entry) => getWorkflowState(entry).workflowStatus === 'completed') || null;
+const getAllowedDubaiYardCompletionEntry = (entries, originStop) => {
+  if (originStop !== 'yard') return null;
+
+  return entries.find(isDubaiEntryReadyForYardCompletion) || null;
+};
+
+const hasOpenTruckEntry = (entries, allowedOpenEntry = null) =>
+  entries.some(
+    (entry) => entry !== allowedOpenEntry && getWorkflowState(entry).workflowStatus !== 'completed'
+  );
+const getLatestCompletedEntry = (entries, effectiveCompletedEntry = null) =>
+  entries.find(
+    (entry) => entry === effectiveCompletedEntry || getWorkflowState(entry).workflowStatus === 'completed'
+  ) || null;
+
+const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updatedAt) => {
+  const previousEntry = getAllowedDubaiYardCompletionEntry(entries, originStop);
+  if (!previousEntry) return null;
+
+  previousEntry.updates.push({
+    stop: 'dubai',
+    status: 'completed',
+    destination: 'dubai',
+    updatedAt,
+    teamName: getTeamName(user),
+    memberName: user.name,
+    remarks: 'Dubai destination trip completed when truck was reassigned from Yard',
+  });
+
+  if (typeof previousEntry.save === 'function') {
+    await previousEntry.save();
+  }
+
+  return previousEntry;
+};
 
 const validateOriginCycle = (originStop, latestCompletedEntry) => {
   const latestDestination = normalizeDestination(latestCompletedEntry?.destination);
@@ -238,7 +304,7 @@ const createTruckEntry = async (req, res, next) => {
     if (
       normalizeUpper(body.headTruckNumber) !== truck.headTruckNumber ||
       normalizeUpper(body.tailTrailerNumber) !== truck.tailTrailerNumber ||
-      body.truckModel !== truck.truckModel
+      normalizeTruckModel(body.truckModel) !== normalizeTruckModel(truck.truckModel)
     ) {
       return res.status(400).json({ success: false, message: 'Truck details do not match selected truck' });
     }
@@ -266,22 +332,24 @@ const createTruckEntry = async (req, res, next) => {
 
     const originStop = originStopUpdate.originStop;
     const existingEntries = await getEntriesForTruck(headTruckNumber, tailTrailerNumber);
-    const duplicateOpenEntry = hasOpenTruckEntry(existingEntries);
+    const entryAt = body.entryAt ? parseSelectedLocalDateTime(body.entryAt) : selectedLocalDateTimeFromDate(new Date());
+
+    if (!entryAt) {
+      return res.status(400).json({ success: false, message: 'entryAt must be a valid date' });
+    }
+
+    const dubaiYardCompletionEntry = getAllowedDubaiYardCompletionEntry(existingEntries, originStop);
+
+    const duplicateOpenEntry = hasOpenTruckEntry(existingEntries, dubaiYardCompletionEntry);
 
     if (duplicateOpenEntry) {
       return res.status(409).json({ success: false, message: 'Duplicate active truck entry already exists' });
     }
 
-    const originCycleError = validateOriginCycle(originStop, getLatestCompletedEntry(existingEntries));
+    const originCycleError = validateOriginCycle(originStop, getLatestCompletedEntry(existingEntries, dubaiYardCompletionEntry));
 
     if (originCycleError) {
       return res.status(400).json({ success: false, message: originCycleError });
-    }
-
-    const entryAt = body.entryAt ? parseSelectedLocalDateTime(body.entryAt) : selectedLocalDateTimeFromDate(new Date());
-
-    if (!entryAt) {
-      return res.status(400).json({ success: false, message: 'entryAt must be a valid date' });
     }
 
     const truckEntry = await TruckEntry.create({
@@ -298,7 +366,7 @@ const createTruckEntry = async (req, res, next) => {
       driverName: body.driverName.trim(),
       driverMobile: body.driverMobile.trim(),
       driverTdCardNumber: body.driverTdCardNumber.trim(),
-      truckModel: body.truckModel,
+      truckModel: normalizeTruckModel(body.truckModel),
       destination,
       originStop,
       updates: [
@@ -311,6 +379,8 @@ const createTruckEntry = async (req, res, next) => {
         },
       ],
     });
+
+    await completeLatestDubaiEntryFromYard(existingEntries, originStop, req.user, entryAt);
 
     return res.status(201).json({
       message: 'Truck entry created successfully',
@@ -491,4 +561,5 @@ module.exports = {
   serializeTruckEntry,
   validateOriginCycle,
   resolveOriginStopForDestination,
+  completeLatestDubaiEntryFromYard,
 };

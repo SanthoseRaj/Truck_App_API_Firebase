@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { TRUCK_MODEL_DISPLAY_VALUES } = require('../utils/truckModel');
 
 const truckEntryUpdateSchema = new mongoose.Schema(
   {
@@ -8,6 +9,11 @@ const truckEntryUpdateSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      trim: true,
+    },
+    destination: {
+      type: String,
+      enum: ['dubai', 'freezone', 'freeZone'],
       trim: true,
     },
     updatedAt: {
@@ -100,7 +106,10 @@ const truckEntrySchema = new mongoose.Schema(
     },
     truckModel: {
       type: String,
-      enum: ['sixAxis', 'fourAxis'],
+      enum: {
+        values: TRUCK_MODEL_DISPLAY_VALUES,
+        message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel',
+      },
       required: [true, 'Truck model is required'],
     },
     destination: {

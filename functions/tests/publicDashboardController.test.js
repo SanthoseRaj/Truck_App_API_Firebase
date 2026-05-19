@@ -68,15 +68,37 @@ const publicEntries = [
       { stop: 'gate', status: 'exit', updatedAt: at(4) },
       { stop: 'port', status: 'entry', updatedAt: at(5) },
       { stop: 'port', status: 'exit', updatedAt: at(6) },
-      { stop: 'clearence', status: 'entry', updatedAt: at(7) },
       { stop: 'clearence', status: 'exit', updatedAt: at(8) },
-      { stop: 'dubai', status: 'entry', updatedAt: at(9) },
-      { stop: 'dubai', status: 'exit', updatedAt: at(10) },
+      { stop: 'dubai', status: 'completed', destination: 'dubai', updatedAt: at(10) },
     ])
   ),
 ];
 
 const counts = buildDashboardCounts(publicEntries);
+const waitingAtCustomClearence = serializePublicTruckEntry(
+  makeEntry('entry-clearence', 'HT-105', 'TT-105', [
+    { stop: 'yard', status: 'entry', updatedAt: at(1) },
+    { stop: 'yard', status: 'exit', updatedAt: at(2) },
+    { stop: 'gate', status: 'entry', updatedAt: at(3) },
+    { stop: 'gate', status: 'exit', updatedAt: at(4) },
+    { stop: 'port', status: 'entry', updatedAt: at(5) },
+    { stop: 'port', status: 'exit', updatedAt: at(6) },
+  ])
+);
+const afterFreeZoneCustomClearenceExit = serializePublicTruckEntry({
+  ...baseEntry,
+  _id: 'entry-freezone-after-clearence',
+  destination: 'freezone',
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(1) },
+    { stop: 'yard', status: 'exit', updatedAt: at(2) },
+    { stop: 'gate', status: 'entry', updatedAt: at(3) },
+    { stop: 'gate', status: 'exit', updatedAt: at(4) },
+    { stop: 'port', status: 'entry', updatedAt: at(5) },
+    { stop: 'port', status: 'exit', updatedAt: at(6) },
+    { stop: 'clearence', status: 'exit', updatedAt: at(7) },
+  ],
+});
 
 assert.strictEqual(publicEntries[0].workflowStatus, 'active');
 assert.strictEqual(publicEntries[0].currentStop, 'yard');
@@ -87,18 +109,59 @@ assert.strictEqual(publicEntries[0].currentAllowedRole, 'yard');
 assert.strictEqual(publicEntries[0].currentAction, 'exit');
 assert.strictEqual(publicEntries[0].driverName, 'Driver One');
 assert.strictEqual(publicEntries[0].destination, 'dubai');
+assert.strictEqual(publicEntries[0].truckModel, '6 Wheel');
 assert.strictEqual(publicEntries[0].updates[0].teamName, 'Yard Team');
 assert.strictEqual(publicEntries[3].workflowStatus, 'completed');
 assert.strictEqual(publicEntries[3].currentStop, 'dubai');
 assert.strictEqual(publicEntries[3].currentStatus, 'completed');
 assert.strictEqual(publicEntries[3].currentAllowedRole, null);
 assert.strictEqual(publicEntries[3].currentAction, null);
+assert.strictEqual(publicEntries[3].updates.at(-1).stop, 'dubai');
+assert.strictEqual(publicEntries[3].updates.at(-1).destination, 'dubai');
+assert.strictEqual(waitingAtCustomClearence.currentAllowedRole, 'clearence');
+assert.strictEqual(waitingAtCustomClearence.currentAllowedStop, 'clearence');
+assert.strictEqual(waitingAtCustomClearence.currentAction, 'exit');
+assert.strictEqual(
+  waitingAtCustomClearence.updates.some((update) => update.stop === 'clearence' && update.status === 'entry'),
+  false
+);
+assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAllowedRole, 'freezone');
+assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAllowedStop, 'freezone');
+assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAction, 'entry');
+const afterDubaiCustomClearenceExit = serializePublicTruckEntry({
+  ...baseEntry,
+  _id: 'entry-dubai-after-clearence',
+  destination: 'dubai',
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(1) },
+    { stop: 'yard', status: 'exit', updatedAt: at(2) },
+    { stop: 'gate', status: 'entry', updatedAt: at(3) },
+    { stop: 'gate', status: 'exit', updatedAt: at(4) },
+    { stop: 'port', status: 'entry', updatedAt: at(5) },
+    { stop: 'port', status: 'exit', updatedAt: at(6) },
+    { stop: 'clearence', status: 'exit', updatedAt: at(7) },
+  ],
+});
+assert.strictEqual(afterDubaiCustomClearenceExit.workflowStatus, 'active');
+assert.strictEqual(afterDubaiCustomClearenceExit.currentAllowedRole, 'yard');
+assert.strictEqual(afterDubaiCustomClearenceExit.currentAllowedStop, 'yard');
+assert.strictEqual(afterDubaiCustomClearenceExit.currentAction, null);
+
+const customClearenceExitCounts = buildDashboardCounts([
+  afterDubaiCustomClearenceExit,
+  afterFreeZoneCustomClearenceExit,
+]);
+
+assert.strictEqual(customClearenceExitCounts.routes.clearenceToDubai, 1);
+assert.strictEqual(customClearenceExitCounts.routes.clearenceToFreezone, 1);
+assert.strictEqual(customClearenceExitCounts.moving, 2);
+assert.strictEqual(customClearenceExitCounts.totalActive, 2);
 
 assert.deepStrictEqual(counts, {
   totalActive: 4,
   totalTrucks: 4,
   moving: 2,
-  exitedDubai: 1,
+  exitedDubai: 0,
   stops: {
     yard: 1,
     gate: 1,
@@ -225,7 +288,6 @@ const gateOriginFreeZoneEntry = serializePublicTruckEntry({
     { stop: 'gate', status: 'exit', updatedAt: at(2) },
     { stop: 'port', status: 'entry', updatedAt: at(3) },
     { stop: 'port', status: 'exit', updatedAt: at(4) },
-    { stop: 'clearence', status: 'entry', updatedAt: at(5) },
     { stop: 'clearence', status: 'exit', updatedAt: at(6) },
     { stop: 'dubai', status: 'entry', updatedAt: at(7) },
     { stop: 'dubai', status: 'exit', updatedAt: at(8) },
