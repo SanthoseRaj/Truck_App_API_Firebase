@@ -1,5 +1,5 @@
 const { normalizeDestination } = require('./destination');
-const { normalizeStop, getNextStopForDestination, getReturnRouteForDestination } = require('./workflow');
+const { normalizeStop, getNextStopForDestination } = require('./workflow');
 
 const stopRoleLabels = {
   yard: 'Yard',
@@ -54,7 +54,7 @@ const getDashboardRouteLabelsForTruckEntry = (truckEntry) => {
 
 const getDashboardCountRouteKeyForTruckEntry = (truckEntry) => {
   if (truckEntry.workflowStatus === 'completed') {
-    return getReturnRouteForDestination(normalizeDestination(truckEntry.destination));
+    return null;
   }
 
   return getDashboardRouteKeyForTruckEntry(truckEntry);

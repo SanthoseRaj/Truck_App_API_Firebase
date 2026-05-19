@@ -31,8 +31,6 @@ const ROUTE_LINES = [
   { from: 'Port Loading', to: 'Custom Clearence' },
   { from: 'Custom Clearence', to: 'Dubai' },
   { from: 'Custom Clearence', to: 'Free Zone' },
-  { from: 'Dubai', to: 'Yard' },
-  { from: 'Free Zone', to: 'Gate' },
 ];
 
 module.exports = {

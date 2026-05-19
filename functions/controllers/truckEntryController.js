@@ -52,6 +52,8 @@ const getWorkflowStops = (truckEntry) =>
   getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
 const getNextRouteStop = (stop, truckEntry) =>
   getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+const isCompletedFreeZoneDestination = (truckEntry) =>
+  normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
 
 const validateRequiredFields = (body) => {
   const missingField = requiredFields.find((field) => {
@@ -107,6 +109,17 @@ const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
 
 const getWorkflowState = (truckEntry) => {
   if (hasCompletedUpdate(truckEntry)) {
+    if (isCompletedFreeZoneDestination(truckEntry)) {
+      return {
+        currentAllowedRole: 'gate',
+        currentAllowedStop: 'gate',
+        currentAction: null,
+        workflowStatus: 'completed',
+        nextRole: 'gate',
+        nextStop: 'gate',
+      };
+    }
+
     return {
       currentAllowedRole: null,
       currentAllowedStop: null,
@@ -156,12 +169,12 @@ const getWorkflowState = (truckEntry) => {
   }
 
   return {
-    currentAllowedRole: null,
-    currentAllowedStop: null,
+    currentAllowedRole: 'gate',
+    currentAllowedStop: 'gate',
     currentAction: null,
     workflowStatus: 'completed',
-    nextRole: null,
-    nextStop: null,
+    nextRole: 'gate',
+    nextStop: 'gate',
   };
 };
 

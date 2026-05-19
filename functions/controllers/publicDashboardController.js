@@ -5,7 +5,6 @@ const {
   requiresEntryForStop,
   getWorkflowStopsForDestination,
   getNextStopForDestination,
-  getReturnRouteForDestination,
 } = require('../utils/workflow');
 const { formatSelectedLocalDateTime } = require('../utils/selectedLocalDateTime');
 const { getDashboardCountRouteKeyForTruckEntry } = require('../utils/dashboardRouteGrouping');
@@ -27,6 +26,9 @@ const hasUpdate = (truckEntry, stop, status) =>
 
 const hasCompletedUpdate = (truckEntry) =>
   (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'completed');
+
+const isCompletedFreeZoneDestination = (truckEntry) =>
+  normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
 
 const getLatestUpdate = (truckEntry, range = null) => {
   if (!truckEntry.updates?.length) return null;
@@ -59,6 +61,14 @@ const getWorkflowStatus = (truckEntry) => {
 
 const getWorkflowState = (truckEntry) => {
   if (hasCompletedUpdate(truckEntry)) {
+    if (isCompletedFreeZoneDestination(truckEntry)) {
+      return {
+        currentAllowedRole: 'gate',
+        currentAllowedStop: 'gate',
+        currentAction: null,
+      };
+    }
+
     return {
       currentAllowedRole: null,
       currentAllowedStop: null,
@@ -96,8 +106,8 @@ const getWorkflowState = (truckEntry) => {
   }
 
   return {
-    currentAllowedRole: null,
-    currentAllowedStop: null,
+    currentAllowedRole: 'gate',
+    currentAllowedStop: 'gate',
     currentAction: null,
   };
 };
@@ -193,7 +203,9 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
   const currentStatus = workflowStatus === 'completed' ? 'completed' : latestStatus;
   const workflowState =
     workflowStatus === 'completed'
-      ? { currentAllowedRole: null, currentAllowedStop: null, currentAction: null }
+      ? normalizeDestination(entry.destination) === 'freezone'
+        ? { currentAllowedRole: 'gate', currentAllowedStop: 'gate', currentAction: null }
+        : { currentAllowedRole: null, currentAllowedStop: null, currentAction: null }
       : getWorkflowState(entry);
 
   return {
@@ -263,9 +275,17 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
   };
 
   truckEntries.forEach((truckEntry) => {
+    const isCompletedFreeZoneReadyForGate =
+      truckEntry.workflowStatus === 'completed' && normalizeDestination(truckEntry.destination) === 'freezone';
+
     if (options.dateScoped) {
       if (truckEntry.currentStop === 'dubai' && ['exit', 'completed'].includes(truckEntry.currentStatus)) {
         counts.exitedDubai += 1;
+      }
+
+      if (isCompletedFreeZoneReadyForGate) {
+        counts.stops.gate += 1;
+        return;
       }
 
       if (truckEntry.currentStatus === 'entry' && truckEntry.currentStop in counts.stops) {
@@ -294,11 +314,8 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
     }
 
     if (truckEntry.workflowStatus === 'completed') {
-      const routeKey = getReturnRouteForDestination(truckEntry.destination);
-
-      if (routeKey) {
-        counts.routes[routeKey] += 1;
-        counts.moving += 1;
+      if (isCompletedFreeZoneReadyForGate) {
+        counts.stops.gate += 1;
       }
 
       return;

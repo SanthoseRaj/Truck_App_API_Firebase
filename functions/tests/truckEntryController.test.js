@@ -115,7 +115,14 @@ assert.deepStrictEqual(getWorkflowState(afterCustomClearenceExit), {
   nextStop: 'yard',
 });
 
-assert.strictEqual(getWorkflowState(completedGateOrigin).workflowStatus, 'completed');
+assert.deepStrictEqual(getWorkflowState(completedGateOrigin), {
+  currentAllowedRole: 'gate',
+  currentAllowedStop: 'gate',
+  currentAction: null,
+  workflowStatus: 'completed',
+  nextRole: 'gate',
+  nextStop: 'gate',
+});
 
 const serializedGateOrigin = serializeTruckEntry(gateOrigin);
 const serializedLegacyFreeZone = serializeTruckEntry({ ...gateOrigin, destination: 'Free Zone' });

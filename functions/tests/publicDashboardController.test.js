@@ -158,9 +158,9 @@ assert.strictEqual(customClearenceExitCounts.moving, 2);
 assert.strictEqual(customClearenceExitCounts.totalActive, 2);
 
 assert.deepStrictEqual(counts, {
-  totalActive: 4,
-  totalTrucks: 4,
-  moving: 2,
+  totalActive: 3,
+  totalTrucks: 3,
+  moving: 1,
   exitedDubai: 0,
   stops: {
     yard: 1,
@@ -176,7 +176,7 @@ assert.deepStrictEqual(counts, {
     portToClearence: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
-    dubaiToYard: 1,
+    dubaiToYard: 0,
     freezoneToGate: 0,
   },
 });
@@ -299,5 +299,60 @@ assert.strictEqual(gateOriginFreeZoneEntry.originStop, 'gate');
 assert.strictEqual(gateOriginFreeZoneEntry.workflowStatus, 'completed');
 assert.strictEqual(gateOriginFreeZoneEntry.currentStop, 'freezone');
 assert.strictEqual(gateOriginFreeZoneEntry.currentStatus, 'completed');
+assert.strictEqual(gateOriginFreeZoneEntry.currentAllowedRole, 'gate');
+assert.strictEqual(gateOriginFreeZoneEntry.currentAllowedStop, 'gate');
+assert.strictEqual(gateOriginFreeZoneEntry.currentAction, null);
+
+const completedFreeZoneCounts = buildDashboardCounts([gateOriginFreeZoneEntry]);
+
+assert.deepStrictEqual(completedFreeZoneCounts, {
+  totalActive: 1,
+  totalTrucks: 1,
+  moving: 0,
+  exitedDubai: 0,
+  stops: {
+    yard: 0,
+    gate: 1,
+    port: 0,
+    clearence: 0,
+    dubai: 0,
+    freezone: 0,
+  },
+  routes: {
+    yardToGate: 0,
+    gateToPort: 0,
+    portToClearence: 0,
+    clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 0,
+    freezoneToGate: 0,
+  },
+});
+
+const completedDubaiCounts = buildDashboardCounts([publicEntries[3]]);
+
+assert.deepStrictEqual(completedDubaiCounts, {
+  totalActive: 0,
+  totalTrucks: 0,
+  moving: 0,
+  exitedDubai: 0,
+  stops: {
+    yard: 0,
+    gate: 0,
+    port: 0,
+    clearence: 0,
+    dubai: 0,
+    freezone: 0,
+  },
+  routes: {
+    yardToGate: 0,
+    gateToPort: 0,
+    portToClearence: 0,
+    clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 0,
+    freezoneToGate: 0,
+  },
+});
 
 console.log('public dashboard controller tests passed');
