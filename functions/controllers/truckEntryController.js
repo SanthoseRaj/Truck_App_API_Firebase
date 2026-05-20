@@ -37,9 +37,19 @@ const requiredFields = [
 const stringFields = requiredFields.filter((field) => field !== 'tripTime');
 const adminRoles = ['owner', 'admin'];
 const originStops = ['yard', 'gate'];
+const finishTripUpdateFields = [
+  'tripNumber',
+  'driverName',
+  'driverMobile',
+  'driverTdCardNumber',
+  'truckModel',
+];
 
 const normalizeUpper = (value) => value.trim().toUpperCase();
 const normalizeText = (value) => value?.toLowerCase().trim();
+const trimString = (value) => (typeof value === 'string' ? value.trim() : value);
+const resolveQueryWithSession = (query, session) =>
+  session && query && typeof query.session === 'function' ? query.session(session) : query;
 
 const isValidOriginStop = (originStop) => originStop === undefined || originStops.includes(originStop);
 const normalizeOriginStop = (originStop) => {
@@ -107,6 +117,11 @@ const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
   hasUpdate(truckEntry, 'clearence', 'exit') &&
   !hasCompletedUpdate(truckEntry);
 
+const isFreeZoneEntryReadyForGateCompletion = (truckEntry) =>
+  normalizeDestination(truckEntry?.destination) === 'freezone' &&
+  hasUpdate(truckEntry, 'freezone', 'exit') &&
+  !hasCompletedUpdate(truckEntry);
+
 const getWorkflowState = (truckEntry) => {
   if (hasCompletedUpdate(truckEntry)) {
     if (isCompletedFreeZoneDestination(truckEntry)) {
@@ -171,8 +186,8 @@ const getWorkflowState = (truckEntry) => {
   return {
     currentAllowedRole: 'gate',
     currentAllowedStop: 'gate',
-    currentAction: null,
-    workflowStatus: 'completed',
+    currentAction: 'entry',
+    workflowStatus: 'pending',
     nextRole: 'gate',
     nextStop: 'gate',
   };
@@ -204,7 +219,16 @@ const serializeTruckEntry = (truckEntry) => {
   const latestStop = normalizeText(latestUpdate?.stop) || null;
   const latestStatus = normalizeText(latestUpdate?.status) || null;
   const currentStatus = workflowState.workflowStatus === 'completed' ? 'completed' : latestStatus;
-  const nextStop = workflowState.workflowStatus === 'completed' ? null : getNextRouteStop(latestStop, entry);
+  const isFreeZoneToGateMoving =
+    isFreeZoneEntryReadyForGateCompletion(entry) &&
+    latestStop === 'freezone' &&
+    latestStatus === 'exit';
+  const nextStop =
+    workflowState.workflowStatus === 'completed'
+      ? null
+      : isFreeZoneToGateMoving
+        ? 'gate'
+        : getNextRouteStop(latestStop, entry);
 
   return {
     ...entry,
@@ -221,6 +245,14 @@ const serializeTruckEntry = (truckEntry) => {
     currentStop: latestStop,
     currentStatus,
     nextStop,
+    ...(isFreeZoneToGateMoving
+      ? {
+          currentLocation: 'Moving',
+          from: 'Free Zone',
+          to: 'Gate',
+          movementStatus: 'Free Zone to Gate',
+        }
+      : {}),
   };
 };
 
@@ -264,6 +296,170 @@ const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updat
   }
 
   return previousEntry;
+};
+
+const completeFreeZoneEntryAtGate = (truckEntry, user, updatedAt, remarks = undefined) => {
+  truckEntry.updates.push({
+    stop: 'gate',
+    status: 'completed',
+    updatedAt,
+    teamName: getTeamName(user),
+    memberName: user.name,
+    remarks: remarks || 'Free Zone destination trip completed at Gate entry',
+  });
+};
+
+const applyFinishTripUpdates = async (truckEntry, updates = {}, session = null) => {
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return { error: { status: 400, message: 'finishTripUpdates must be an object' } };
+  }
+
+  if (updates.supplierId !== undefined || updates.supplierName !== undefined) {
+    const supplierResult = await resolveActiveSupplierForEntry(updates, { session });
+
+    if (supplierResult.error) return { error: supplierResult.error };
+
+    truckEntry.supplierId = supplierResult.supplier._id;
+    truckEntry.supplierName = supplierResult.supplier.supplierName;
+  }
+
+  if (updates.shipId !== undefined) {
+    if (!mongoose.isValidObjectId(updates.shipId)) {
+      return { error: { status: 404, message: 'Ship not found' } };
+    }
+
+    const ship = await resolveQueryWithSession(Ship.findById(updates.shipId), session);
+    if (!ship) return { error: { status: 404, message: 'Ship not found' } };
+
+    truckEntry.shipId = ship._id;
+  }
+
+  if (updates.shipName !== undefined) {
+    if (typeof updates.shipName !== 'string' || !updates.shipName.trim()) {
+      return { error: { status: 400, message: 'shipName must be a non-empty string' } };
+    }
+
+    truckEntry.shipName = updates.shipName.trim();
+  }
+
+  if (updates.shipNumber !== undefined) {
+    if (typeof updates.shipNumber !== 'string' || !updates.shipNumber.trim()) {
+      return { error: { status: 400, message: 'shipNumber must be a non-empty string' } };
+    }
+
+    truckEntry.shipNumber = normalizeUpper(updates.shipNumber);
+  }
+
+  for (const field of finishTripUpdateFields) {
+    if (updates[field] === undefined) continue;
+
+    if (typeof updates[field] !== 'string' || !updates[field].trim()) {
+      return { error: { status: 400, message: `${field} must be a non-empty string` } };
+    }
+
+    truckEntry[field] = field === 'truckModel' ? normalizeTruckModel(updates[field]) : updates[field].trim();
+
+    if (field === 'truckModel' && !truckEntry[field]) {
+      return { error: { status: 400, message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel' } };
+    }
+  }
+
+  return {};
+};
+
+const buildTruckEntryPayload = (body, truck, ship, supplier, originStop, entryAt, user) => ({
+  truckId: truck._id,
+  headTruckNumber: normalizeUpper(body.headTruckNumber),
+  tailTrailerNumber: normalizeUpper(body.tailTrailerNumber),
+  supplierId: supplier._id,
+  supplierName: supplier.supplierName,
+  shipId: ship._id,
+  shipName: body.shipName.trim(),
+  shipNumber: normalizeUpper(body.shipNumber),
+  tripNumber: body.tripNumber.trim(),
+  tripTime: Number(body.tripTime),
+  driverName: body.driverName.trim(),
+  driverMobile: body.driverMobile.trim(),
+  driverTdCardNumber: body.driverTdCardNumber.trim(),
+  truckModel: normalizeTruckModel(body.truckModel),
+  destination: normalizeDestination(body.destination),
+  originStop,
+  updates: [
+    {
+      stop: originStop,
+      status: 'entry',
+      updatedAt: entryAt,
+      teamName: getTeamName(user),
+      memberName: user.name,
+    },
+  ],
+});
+
+const validateNextTripForGateReturn = async (body, existingTrip, session) => {
+  const validationError = validateRequiredFields(body);
+
+  if (validationError) {
+    return { error: { status: 400, message: validationError } };
+  }
+
+  const originStopUpdate = resolveOriginStopForDestination(body.destination, body.originStop);
+
+  if (originStopUpdate.error) return { error: originStopUpdate.error };
+  if (originStopUpdate.originStop !== 'gate') {
+    return { error: { status: 400, message: 'nextTrip originStop must be gate' } };
+  }
+
+  if (!mongoose.isValidObjectId(body.shipId)) {
+    return { error: { status: 404, message: 'Ship not found' } };
+  }
+
+  if (!mongoose.isValidObjectId(body.truckId)) {
+    return { error: { status: 404, message: 'Truck not found' } };
+  }
+
+  if (String(existingTrip.truckId) !== String(body.truckId)) {
+    return { error: { status: 400, message: 'nextTrip must use the same truck' } };
+  }
+
+  const truck = await resolveQueryWithSession(Truck.findOne({ _id: body.truckId, isActive: true }), session);
+  if (!truck) return { error: { status: 404, message: 'Truck not found' } };
+
+  if (
+    normalizeUpper(body.headTruckNumber) !== truck.headTruckNumber ||
+    normalizeUpper(body.tailTrailerNumber) !== truck.tailTrailerNumber ||
+    normalizeTruckModel(body.truckModel) !== normalizeTruckModel(truck.truckModel)
+  ) {
+    return { error: { status: 400, message: 'Truck details do not match selected truck' } };
+  }
+
+  if (
+    normalizeUpper(body.headTruckNumber) !== normalizeUpper(existingTrip.headTruckNumber) ||
+    normalizeUpper(body.tailTrailerNumber) !== normalizeUpper(existingTrip.tailTrailerNumber)
+  ) {
+    return { error: { status: 400, message: 'nextTrip must use the same truck' } };
+  }
+
+  const ship = await resolveQueryWithSession(Ship.findById(body.shipId), session);
+  if (!ship) return { error: { status: 404, message: 'Ship not found' } };
+
+  const supplierResult = await resolveActiveSupplierForEntry(body, { session });
+  if (supplierResult.error) return { error: supplierResult.error };
+
+  const entryAt = body.entryAt
+    ? parseSelectedLocalDateTime(body.entryAt)
+    : selectedLocalDateTimeFromDate(new Date());
+
+  if (!entryAt) {
+    return { error: { status: 400, message: 'nextTrip.entryAt must be a valid date' } };
+  }
+
+  return {
+    truck,
+    ship,
+    supplier: supplierResult.supplier,
+    originStop: originStopUpdate.originStop,
+    entryAt,
+  };
 };
 
 const validateOriginCycle = (originStop, latestCompletedEntry) => {
@@ -431,6 +627,164 @@ const getTruckEntryById = async (req, res, next) => {
   }
 };
 
+const markGateReturnEntry = async (req, res, next) => {
+  if (normalizeStop(req.user.role) !== 'gate') {
+    return res.status(403).json({ success: false, message: 'You do not have permission' });
+  }
+
+  const body = req.body || {};
+  const finishTripUpdates = body.finishTripUpdates || {};
+  const nextTrip = body.nextTrip;
+  const entryAt = body.entryAt
+    ? parseSelectedLocalDateTime(body.entryAt)
+    : selectedLocalDateTimeFromDate(new Date());
+
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'Truck entry not found' });
+  }
+
+  if (!entryAt) {
+    return res.status(400).json({ success: false, message: 'entryAt must be a valid date' });
+  }
+
+  if (!nextTrip || typeof nextTrip !== 'object' || Array.isArray(nextTrip)) {
+    return res.status(400).json({ success: false, message: 'nextTrip is required' });
+  }
+
+  if (
+    finishTripUpdates.remarks !== undefined &&
+    (typeof finishTripUpdates.remarks !== 'string' || !finishTripUpdates.remarks.trim())
+  ) {
+    return res.status(400).json({ success: false, message: 'remarks must be a non-empty string' });
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    let completedTrip;
+    let newTrip;
+
+    await session.withTransaction(async () => {
+      const truckEntry = await resolveQueryWithSession(TruckEntry.findById(req.params.id), session);
+
+      if (!truckEntry) {
+        const error = new Error('Truck entry not found');
+        error.status = 404;
+        throw error;
+      }
+
+      const workflowState = getWorkflowState(truckEntry);
+      const serializedReturningTrip = serializeTruckEntry(truckEntry);
+
+      if (
+        normalizeDestination(truckEntry.destination) !== 'freezone' ||
+        workflowState.workflowStatus === 'completed' ||
+        workflowState.currentAllowedRole !== 'gate' ||
+        workflowState.currentAllowedStop !== 'gate' ||
+        workflowState.currentAction !== 'entry' ||
+        serializedReturningTrip.movementStatus !== 'Free Zone to Gate'
+      ) {
+        const error = new Error('Truck entry is not ready for Free Zone return Gate entry');
+        error.status = 400;
+        throw error;
+      }
+
+      const finishUpdateResult = await applyFinishTripUpdates(truckEntry, finishTripUpdates, session);
+      if (finishUpdateResult.error) {
+        const error = new Error(finishUpdateResult.error.message);
+        error.status = finishUpdateResult.error.status;
+        throw error;
+      }
+
+      const nextTripValidation = await validateNextTripForGateReturn(
+        {
+          ...nextTrip,
+          entryAt: nextTrip.entryAt || entryAt,
+        },
+        truckEntry,
+        session
+      );
+      if (nextTripValidation.error) {
+        const error = new Error(nextTripValidation.error.message);
+        error.status = nextTripValidation.error.status;
+        throw error;
+      }
+
+      const existingEntries = await resolveQueryWithSession(
+        TruckEntry.find({
+          headTruckNumber: normalizeUpper(truckEntry.headTruckNumber),
+          tailTrailerNumber: normalizeUpper(truckEntry.tailTrailerNumber),
+        }).sort('-createdAt'),
+        session
+      );
+      const duplicateOpenEntry = existingEntries.some(
+        (entry) =>
+          String(entry._id) !== String(truckEntry._id) &&
+          getWorkflowState(entry).workflowStatus !== 'completed'
+      );
+
+      if (duplicateOpenEntry) {
+        const error = new Error('Duplicate active truck entry already exists');
+        error.status = 409;
+        throw error;
+      }
+
+      truckEntry.updates.push({
+        stop: 'gate',
+        status: 'entry',
+        updatedAt: entryAt,
+        teamName: getTeamName(req.user),
+        memberName: req.user.name,
+        remarks: trimString(finishTripUpdates.remarks),
+      });
+      completeFreeZoneEntryAtGate(truckEntry, req.user, entryAt, trimString(finishTripUpdates.remarks));
+      truckEntry.completedAt = entryAt;
+      truckEntry.completedLocation = 'gate';
+
+      await truckEntry.save({ session });
+
+      const nextTripPayload = buildTruckEntryPayload(
+        {
+          ...nextTrip,
+          entryAt: nextTrip.entryAt || entryAt,
+        },
+        nextTripValidation.truck,
+        nextTripValidation.ship,
+        nextTripValidation.supplier,
+        nextTripValidation.originStop,
+        nextTripValidation.entryAt,
+        req.user
+      );
+      const createdTrips = await TruckEntry.create([nextTripPayload], { session });
+
+      completedTrip = truckEntry;
+      newTrip = createdTrips[0];
+    });
+
+    await completedTrip.populate('shipId', 'shipName shipNumber');
+    await newTrip.populate('shipId', 'shipName shipNumber');
+
+    const truckEntries = await TruckEntry.find().populate('shipId', 'shipName shipNumber').sort('-createdAt');
+    const serializedTruckEntries = truckEntries.map(serializeTruckEntry);
+    const counts = buildDashboardCounts(serializedTruckEntries);
+
+    return res.status(200).json({
+      message: 'Free Zone return Gate entry completed and next trip created successfully',
+      completedTrip: serializeTruckEntry(completedTrip),
+      newTrip: serializeTruckEntry(newTrip),
+      counts,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+
+    next(error);
+  } finally {
+    session.endSession();
+  }
+};
+
 const validateWorkflowUpdate = (truckEntry, userRole, action) => {
   const workflowState = getWorkflowState(truckEntry);
   const workflowStops = getWorkflowStops(truckEntry);
@@ -525,6 +879,17 @@ const appendWorkflowUpdate = async (req, res, next, action) => {
       return res.status(workflowError.status).json({ success: false, message: workflowError.message });
     }
 
+    if (
+      action === 'entry' &&
+      normalizeStop(req.user.role, normalizeDestination(truckEntry.destination)) === 'gate' &&
+      isFreeZoneEntryReadyForGateCompletion(truckEntry)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Use gate-return-entry endpoint to complete Free Zone return and create next trip',
+      });
+    }
+
     const dateField = action === 'entry' ? 'entryAt' : 'exitAt';
     const updatedAt = body[dateField]
       ? parseSelectedLocalDateTime(body[dateField])
@@ -567,6 +932,7 @@ module.exports = {
   createTruckEntry,
   getTruckEntries,
   getTruckEntryById,
+  markGateReturnEntry,
   markTeamEntry,
   markTeamExit,
   getWorkflowState,

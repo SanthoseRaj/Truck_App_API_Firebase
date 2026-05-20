@@ -30,6 +30,11 @@ const hasCompletedUpdate = (truckEntry) =>
 const isCompletedFreeZoneDestination = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
 
+const isFreeZoneEntryReadyForGateCompletion = (truckEntry) =>
+  normalizeDestination(truckEntry?.destination) === 'freezone' &&
+  hasUpdate(truckEntry, 'freezone', 'exit') &&
+  !hasCompletedUpdate(truckEntry);
+
 const getLatestUpdate = (truckEntry, range = null) => {
   if (!truckEntry.updates?.length) return null;
 
@@ -56,7 +61,7 @@ const getWorkflowStatus = (truckEntry) => {
 
   if (normalizeDestination(truckEntry.destination) === 'dubai') return 'active';
 
-  return completed ? 'completed' : 'active';
+  return completed && !isFreeZoneEntryReadyForGateCompletion(truckEntry) ? 'completed' : 'active';
 };
 
 const getWorkflowState = (truckEntry) => {
@@ -108,7 +113,7 @@ const getWorkflowState = (truckEntry) => {
   return {
     currentAllowedRole: 'gate',
     currentAllowedStop: 'gate',
-    currentAction: null,
+    currentAction: 'entry',
   };
 };
 
@@ -207,6 +212,10 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
         ? { currentAllowedRole: 'gate', currentAllowedStop: 'gate', currentAction: null }
         : { currentAllowedRole: null, currentAllowedStop: null, currentAction: null }
       : getWorkflowState(entry);
+  const isFreeZoneToGateMoving =
+    isFreeZoneEntryReadyForGateCompletion(entry) &&
+    currentStop === 'freezone' &&
+    latestStatus === 'exit';
 
   return {
     _id: entry._id,
@@ -228,9 +237,22 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     originStop: getOriginStop(entry),
     currentStop,
     currentStatus,
-    nextStop: workflowStatus === 'completed' ? null : getNextStopForEntry(currentStop, entry),
+    nextStop:
+      workflowStatus === 'completed'
+        ? null
+        : isFreeZoneToGateMoving
+          ? 'gate'
+          : getNextStopForEntry(currentStop, entry),
     workflowStatus,
     ...workflowState,
+    ...(isFreeZoneToGateMoving
+      ? {
+          currentLocation: 'Moving',
+          from: 'Free Zone',
+          to: 'Gate',
+          movementStatus: 'Free Zone to Gate',
+        }
+      : {}),
     updates: (entry.updates || []).map((update) => {
       const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
       const status = normalizeText(update.status);

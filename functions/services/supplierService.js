@@ -120,7 +120,10 @@ const deleteSupplier = async (id) => {
   return supplier ? serializeSupplier(supplier) : null;
 };
 
-const resolveActiveSupplierForEntry = async (body = {}) => {
+const resolveQueryWithSession = (query, session) =>
+  session && query && typeof query.session === 'function' ? query.session(session) : query;
+
+const resolveActiveSupplierForEntry = async (body = {}, options = {}) => {
   const hasSupplierId = body.supplierId !== undefined && body.supplierId !== null && String(body.supplierId).trim();
 
   if (hasSupplierId) {
@@ -128,7 +131,10 @@ const resolveActiveSupplierForEntry = async (body = {}) => {
       return { error: { status: 404, message: 'Supplier not found' } };
     }
 
-    const supplier = await Supplier.findOne({ _id: body.supplierId, isActive: true });
+    const supplier = await resolveQueryWithSession(
+      Supplier.findOne({ _id: body.supplierId, isActive: true }),
+      options.session
+    );
     if (!supplier) return { error: { status: 404, message: 'Supplier not found' } };
     return { supplier };
   }
@@ -137,10 +143,13 @@ const resolveActiveSupplierForEntry = async (body = {}) => {
     return { error: { status: 400, message: 'supplierName or supplierId is required' } };
   }
 
-  const supplier = await Supplier.findOne({
-    supplierNameKey: supplierNameKey(body.supplierName),
-    isActive: true,
-  });
+  const supplier = await resolveQueryWithSession(
+    Supplier.findOne({
+      supplierNameKey: supplierNameKey(body.supplierName),
+      isActive: true,
+    }),
+    options.session
+  );
 
   if (!supplier) return { error: { status: 404, message: 'Supplier not found' } };
   return { supplier };

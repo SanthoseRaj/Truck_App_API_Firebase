@@ -296,14 +296,31 @@ const gateOriginFreeZoneEntry = serializePublicTruckEntry({
 
 assert.strictEqual(gateOriginFreeZoneEntry.destination, 'freezone');
 assert.strictEqual(gateOriginFreeZoneEntry.originStop, 'gate');
-assert.strictEqual(gateOriginFreeZoneEntry.workflowStatus, 'completed');
+assert.strictEqual(gateOriginFreeZoneEntry.workflowStatus, 'active');
 assert.strictEqual(gateOriginFreeZoneEntry.currentStop, 'freezone');
-assert.strictEqual(gateOriginFreeZoneEntry.currentStatus, 'completed');
+assert.strictEqual(gateOriginFreeZoneEntry.currentStatus, 'exit');
 assert.strictEqual(gateOriginFreeZoneEntry.currentAllowedRole, 'gate');
 assert.strictEqual(gateOriginFreeZoneEntry.currentAllowedStop, 'gate');
-assert.strictEqual(gateOriginFreeZoneEntry.currentAction, null);
+assert.strictEqual(gateOriginFreeZoneEntry.currentAction, 'entry');
+assert.strictEqual(gateOriginFreeZoneEntry.currentLocation, 'Moving');
+assert.strictEqual(gateOriginFreeZoneEntry.from, 'Free Zone');
+assert.strictEqual(gateOriginFreeZoneEntry.to, 'Gate');
+assert.strictEqual(gateOriginFreeZoneEntry.movementStatus, 'Free Zone to Gate');
+assert.strictEqual(gateOriginFreeZoneEntry.nextStop, 'gate');
 
-const completedFreeZoneCounts = buildDashboardCounts([gateOriginFreeZoneEntry]);
+const completedGateOriginFreeZoneEntry = serializePublicTruckEntry({
+  ...baseEntry,
+  _id: 'completed-gate-origin-free-zone',
+  destination: 'freezone',
+  originStop: 'gate',
+  updates: [
+    ...gateOriginFreeZoneEntry.updates,
+    { stop: 'gate', status: 'entry', updatedAt: at(9) },
+    { stop: 'gate', status: 'completed', updatedAt: at(9) },
+  ],
+});
+
+const completedFreeZoneCounts = buildDashboardCounts([completedGateOriginFreeZoneEntry]);
 
 assert.deepStrictEqual(completedFreeZoneCounts, {
   totalActive: 1,
@@ -326,6 +343,32 @@ assert.deepStrictEqual(completedFreeZoneCounts, {
     clearenceToFreezone: 0,
     dubaiToYard: 0,
     freezoneToGate: 0,
+  },
+});
+
+const pendingFreeZoneToGateCounts = buildDashboardCounts([gateOriginFreeZoneEntry]);
+
+assert.deepStrictEqual(pendingFreeZoneToGateCounts, {
+  totalActive: 1,
+  totalTrucks: 1,
+  moving: 1,
+  exitedDubai: 0,
+  stops: {
+    yard: 0,
+    gate: 0,
+    port: 0,
+    clearence: 0,
+    dubai: 0,
+    freezone: 0,
+  },
+  routes: {
+    yardToGate: 0,
+    gateToPort: 0,
+    portToClearence: 0,
+    clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 0,
+    freezoneToGate: 1,
   },
 });
 

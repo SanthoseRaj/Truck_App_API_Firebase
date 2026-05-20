@@ -3,6 +3,7 @@ const {
   createTruckEntry,
   getTruckEntries,
   getTruckEntryById,
+  markGateReturnEntry,
   markTeamEntry,
   markTeamExit,
 } = require('../controllers/truckEntryController');
@@ -54,6 +55,34 @@ router.post('/', allowRoles(...truckEntryCreators), createTruckEntry);
  *         description: List of truck entries
  */
 router.get('/', allowRoles(...truckEntryReaders), getTruckEntries);
+
+/**
+ * @swagger
+ * /api/truck-entries/{id}/gate-return-entry:
+ *   patch:
+ *     summary: Complete a Free Zone return at Gate and create the next trip atomically
+ *     tags: [Truck Entries]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Free Zone return completed and next trip created
+ *       400:
+ *         description: Validation error or trip not ready for Gate return
+ *       403:
+ *         description: User is not assigned to Gate
+ *       404:
+ *         description: Truck entry, truck, ship, or supplier not found
+ *       409:
+ *         description: Duplicate active truck entry
+ */
+router.patch('/:id/gate-return-entry', allowRoles('gate'), markGateReturnEntry);
 
 /**
  * @swagger

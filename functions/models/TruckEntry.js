@@ -124,6 +124,11 @@ const truckEntrySchema = new mongoose.Schema(
       trim: true,
     },
     updates: [truckEntryUpdateSchema],
+    completedAt: Date,
+    completedLocation: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );

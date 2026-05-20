@@ -6,6 +6,7 @@ const TruckEntry = require('../models/TruckEntry');
 const {
   createTruckEntry,
   getWorkflowState,
+  markTeamEntry,
   resolveEntryDestinationUpdate,
   resolveOriginStopForDestination,
   serializeTruckEntry,
@@ -56,6 +57,15 @@ const completedGateOrigin = {
     { stop: 'clearence', status: 'exit', updatedAt: at(5) },
     { stop: 'dubai', status: 'entry', updatedAt: at(6) },
     { stop: 'dubai', status: 'exit', updatedAt: at(7) },
+  ],
+};
+
+const completedFreeZoneAtGate = {
+  ...completedGateOrigin,
+  updates: [
+    ...completedGateOrigin.updates,
+    { stop: 'gate', status: 'entry', updatedAt: at(8) },
+    { stop: 'gate', status: 'completed', updatedAt: at(8) },
   ],
 };
 
@@ -118,6 +128,15 @@ assert.deepStrictEqual(getWorkflowState(afterCustomClearenceExit), {
 assert.deepStrictEqual(getWorkflowState(completedGateOrigin), {
   currentAllowedRole: 'gate',
   currentAllowedStop: 'gate',
+  currentAction: 'entry',
+  workflowStatus: 'pending',
+  nextRole: 'gate',
+  nextStop: 'gate',
+});
+
+assert.deepStrictEqual(getWorkflowState(completedFreeZoneAtGate), {
+  currentAllowedRole: 'gate',
+  currentAllowedStop: 'gate',
   currentAction: null,
   workflowStatus: 'completed',
   nextRole: 'gate',
@@ -131,6 +150,7 @@ const serializedAfterFreeZoneCustomClearenceExit = serializeTruckEntry({
   ...afterCustomClearenceExit,
   destination: 'freezone',
 });
+const serializedAfterFreeZoneExit = serializeTruckEntry(completedGateOrigin);
 
 assert.strictEqual(serializedGateOrigin.destination, 'freezone');
 assert.strictEqual(serializedLegacyFreeZone.destination, 'freezone');
@@ -153,6 +173,15 @@ assert.strictEqual(
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedRole, 'freezone');
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedStop, 'freezone');
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAction, 'entry');
+assert.strictEqual(serializedAfterFreeZoneExit.workflowStatus, 'pending');
+assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedRole, 'gate');
+assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedStop, 'gate');
+assert.strictEqual(serializedAfterFreeZoneExit.currentAction, 'entry');
+assert.strictEqual(serializedAfterFreeZoneExit.currentLocation, 'Moving');
+assert.strictEqual(serializedAfterFreeZoneExit.from, 'Free Zone');
+assert.strictEqual(serializedAfterFreeZoneExit.to, 'Gate');
+assert.strictEqual(serializedAfterFreeZoneExit.movementStatus, 'Free Zone to Gate');
+assert.strictEqual(serializedAfterFreeZoneExit.nextStop, 'gate');
 const serializedAfterDubaiCustomClearenceExit = serializeTruckEntry(afterCustomClearenceExit);
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedRole, 'yard');
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedStop, 'yard');
@@ -336,6 +365,44 @@ const callCreateTruckEntry = async ({ body, entries = [], createImpl = null, exp
   return res;
 };
 
+const callMarkTeamEntry = async ({ entry, body = {}, role = 'gate' }) => {
+  const originalFindById = TruckEntry.findById;
+  const res = {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+  let nextError = null;
+
+  TruckEntry.findById = async () => entry;
+
+  try {
+    await markTeamEntry(
+      {
+        params: { id: validTruckId },
+        body,
+        user: { role, name: 'Gate Member', entryTeam: { name: 'Gate Entry Team' } },
+      },
+      res,
+      (error) => {
+        nextError = error;
+      }
+    );
+  } finally {
+    TruckEntry.findById = originalFindById;
+  }
+
+  assert.strictEqual(nextError, null);
+  return res;
+};
+
 (async () => {
   const yardFreezone = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
@@ -461,6 +528,23 @@ const callCreateTruckEntry = async ({ body, entries = [], createImpl = null, exp
 
   assert.strictEqual(pendingFreeZoneDuplicate.statusCode, 409);
   assert.strictEqual(pendingFreeZoneDuplicate.body.message, 'Duplicate active truck entry already exists');
+
+  const gateCompletionEntry = {
+    ...completedGateOrigin,
+    save: async () => {},
+    populate: async () => {},
+  };
+  const normalGateEntryForReturn = await callMarkTeamEntry({
+    entry: gateCompletionEntry,
+    body: { entryAt: '2026-05-01T08:08' },
+  });
+
+  assert.strictEqual(normalGateEntryForReturn.statusCode, 400);
+  assert.strictEqual(
+    normalGateEntryForReturn.body.message,
+    'Use gate-return-entry endpoint to complete Free Zone return and create next trip'
+  );
+  assert.strictEqual(getWorkflowState(gateCompletionEntry).workflowStatus, 'pending');
 
   for (const truckModel of ['2 Axle', '3 Axle', '6 Wheel']) {
     let createdPayload = null;
