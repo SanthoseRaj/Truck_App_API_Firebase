@@ -27,6 +27,14 @@ const hasUpdate = (truckEntry, stop, status) =>
 const hasCompletedUpdate = (truckEntry) =>
   (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'completed');
 
+const hasCanceledUpdate = (truckEntry) =>
+  (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'canceled');
+
+const isCanceledTruckEntry = (truckEntry) =>
+  normalizeText(truckEntry?.workflowStatus) === 'canceled' ||
+  normalizeText(truckEntry?.currentStatus) === 'canceled' ||
+  hasCanceledUpdate(truckEntry);
+
 const isCompletedFreeZoneDestination = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
 
@@ -51,6 +59,7 @@ const getNextStopForEntry = (stop, truckEntry) =>
   getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
 
 const getWorkflowStatus = (truckEntry) => {
+  if (isCanceledTruckEntry(truckEntry)) return 'canceled';
   if (hasCompletedUpdate(truckEntry)) return 'completed';
 
   const completed = getWorkflowStops(truckEntry).every(
@@ -65,6 +74,14 @@ const getWorkflowStatus = (truckEntry) => {
 };
 
 const getWorkflowState = (truckEntry) => {
+  if (isCanceledTruckEntry(truckEntry)) {
+    return {
+      currentAllowedRole: null,
+      currentAllowedStop: null,
+      currentAction: null,
+    };
+  }
+
   if (hasCompletedUpdate(truckEntry)) {
     if (isCompletedFreeZoneDestination(truckEntry)) {
       return {
@@ -201,11 +218,13 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
   const currentStop = normalizeStop(latestUpdate?.stop, destination);
   const latestStatus = normalizeText(latestUpdate?.status) || null;
   const workflowStatus = options.dateRange
-    ? latestStatus === 'completed'
+    ? latestStatus === 'canceled'
+      ? 'canceled'
+      : latestStatus === 'completed'
       ? 'completed'
       : 'active'
     : getWorkflowStatus(entry);
-  const currentStatus = workflowStatus === 'completed' ? 'completed' : latestStatus;
+  const currentStatus = ['completed', 'canceled'].includes(workflowStatus) ? workflowStatus : latestStatus;
   const workflowState =
     workflowStatus === 'completed'
       ? normalizeDestination(entry.destination) === 'freezone'
@@ -213,6 +232,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
         : { currentAllowedRole: null, currentAllowedStop: null, currentAction: null }
       : getWorkflowState(entry);
   const isFreeZoneToGateMoving =
+    workflowStatus !== 'canceled' &&
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     currentStop === 'freezone' &&
     latestStatus === 'exit';
@@ -238,7 +258,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     currentStop,
     currentStatus,
     nextStop:
-      workflowStatus === 'completed'
+      ['completed', 'canceled'].includes(workflowStatus)
         ? null
         : isFreeZoneToGateMoving
           ? 'gate'
@@ -263,6 +283,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
         ...(update.destination ? { destination: normalizeDestination(update.destination) } : {}),
         updatedAt: selectedAt,
         teamName: update.teamName,
+        memberId: update.memberId,
         memberName: update.memberName,
         crossedAt: selectedAt,
         ...(status === 'entry' ? { entryAt: selectedAt } : {}),
@@ -297,6 +318,10 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
   };
 
   truckEntries.forEach((truckEntry) => {
+    if (truckEntry.workflowStatus === 'canceled' || truckEntry.currentStatus === 'canceled') {
+      return;
+    }
+
     const isCompletedFreeZoneReadyForGate =
       truckEntry.workflowStatus === 'completed' && normalizeDestination(truckEntry.destination) === 'freezone';
 
@@ -367,6 +392,9 @@ const getPublicDashboardTruckEntries = async (req, res, next) => {
   try {
     const query = {
       isDeleted: { $ne: true },
+      workflowStatus: { $ne: 'canceled' },
+      currentStatus: { $ne: 'canceled' },
+      'updates.status': { $ne: 'canceled' },
       $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
     };
 

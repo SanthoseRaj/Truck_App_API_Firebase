@@ -28,6 +28,10 @@ const truckEntryUpdateSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    memberId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
     remarks: {
       type: String,
       trim: true,
@@ -124,6 +128,47 @@ const truckEntrySchema = new mongoose.Schema(
       trim: true,
     },
     updates: [truckEntryUpdateSchema],
+    workflowStatus: {
+      type: String,
+      enum: ['pending', 'completed', 'canceled'],
+      trim: true,
+    },
+    currentStatus: {
+      type: String,
+      enum: ['entry', 'exit', 'completed', 'moving', 'canceled'],
+      trim: true,
+    },
+    currentAction: {
+      type: String,
+      enum: ['entry', 'exit', null],
+      default: undefined,
+    },
+    currentAllowedRole: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    currentAllowedStop: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    nextRole: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    nextStop: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    movementStatus: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
+    canceledAt: Date,
     completedAt: Date,
     completedLocation: {
       type: String,

@@ -50,6 +50,13 @@ const normalizeText = (value) => value?.toLowerCase().trim();
 const trimString = (value) => (typeof value === 'string' ? value.trim() : value);
 const resolveQueryWithSession = (query, session) =>
   session && query && typeof query.session === 'function' ? query.session(session) : query;
+const parseIsoDateTime = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== 'string' || !value.includes('T')) return null;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
 const isValidOriginStop = (originStop) => originStop === undefined || originStops.includes(originStop);
 const normalizeOriginStop = (originStop) => {
@@ -112,6 +119,14 @@ const hasUpdate = (truckEntry, stop, status) =>
 const hasCompletedUpdate = (truckEntry) =>
   truckEntry.updates.some((update) => normalizeText(update.status) === 'completed');
 
+const hasCanceledUpdate = (truckEntry) =>
+  (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'canceled');
+
+const isCanceledTruckEntry = (truckEntry) =>
+  normalizeText(truckEntry?.workflowStatus) === 'canceled' ||
+  normalizeText(truckEntry?.currentStatus) === 'canceled' ||
+  hasCanceledUpdate(truckEntry);
+
 const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'dubai' &&
   hasUpdate(truckEntry, 'clearence', 'exit') &&
@@ -123,6 +138,17 @@ const isFreeZoneEntryReadyForGateCompletion = (truckEntry) =>
   !hasCompletedUpdate(truckEntry);
 
 const getWorkflowState = (truckEntry) => {
+  if (isCanceledTruckEntry(truckEntry)) {
+    return {
+      currentAllowedRole: null,
+      currentAllowedStop: null,
+      currentAction: null,
+      workflowStatus: 'canceled',
+      nextRole: null,
+      nextStop: null,
+    };
+  }
+
   if (hasCompletedUpdate(truckEntry)) {
     if (isCompletedFreeZoneDestination(truckEntry)) {
       return {
@@ -218,13 +244,17 @@ const serializeTruckEntry = (truckEntry) => {
   const latestUpdate = [...updates].reverse()[0] || null;
   const latestStop = normalizeText(latestUpdate?.stop) || null;
   const latestStatus = normalizeText(latestUpdate?.status) || null;
-  const currentStatus = workflowState.workflowStatus === 'completed' ? 'completed' : latestStatus;
+  const currentStatus =
+    workflowState.workflowStatus === 'completed' || workflowState.workflowStatus === 'canceled'
+      ? workflowState.workflowStatus
+      : latestStatus;
   const isFreeZoneToGateMoving =
+    workflowState.workflowStatus !== 'canceled' &&
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     latestStop === 'freezone' &&
     latestStatus === 'exit';
   const nextStop =
-    workflowState.workflowStatus === 'completed'
+    ['completed', 'canceled'].includes(workflowState.workflowStatus)
       ? null
       : isFreeZoneToGateMoving
         ? 'gate'
@@ -270,7 +300,9 @@ const getAllowedDubaiYardCompletionEntry = (entries, originStop) => {
 
 const hasOpenTruckEntry = (entries, allowedOpenEntry = null) =>
   entries.some(
-    (entry) => entry !== allowedOpenEntry && getWorkflowState(entry).workflowStatus !== 'completed'
+    (entry) =>
+      entry !== allowedOpenEntry &&
+      !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus)
   );
 const getLatestCompletedEntry = (entries, effectiveCompletedEntry = null) =>
   entries.find(
@@ -627,6 +659,72 @@ const getTruckEntryById = async (req, res, next) => {
   }
 };
 
+const cancelTruckEntry = async (req, res, next) => {
+  try {
+    const body = req.body || {};
+
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admin can cancel trips' });
+    }
+
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Truck entry not found' });
+    }
+
+    if (body.remarks !== undefined && typeof body.remarks !== 'string') {
+      return res.status(400).json({ success: false, message: 'remarks must be a string' });
+    }
+
+    const canceledAt = body.canceledAt ? parseIsoDateTime(body.canceledAt) : selectedLocalDateTimeFromDate(new Date());
+
+    if (!canceledAt) {
+      return res.status(400).json({ success: false, message: 'canceledAt must be a valid ISO datetime' });
+    }
+
+    const truckEntry = await TruckEntry.findById(req.params.id).populate('shipId', 'shipName shipNumber');
+    if (!truckEntry) return res.status(404).json({ success: false, message: 'Truck entry not found' });
+
+    if (isCanceledTruckEntry(truckEntry)) {
+      return res.status(400).json({ success: false, message: 'Truck entry is already canceled' });
+    }
+
+    const serializedBeforeCancel = serializeTruckEntry(truckEntry);
+    const cancelStop =
+      serializedBeforeCancel.currentStop ||
+      serializedBeforeCancel.currentAllowedStop ||
+      serializedBeforeCancel.originStop ||
+      'yard';
+
+    truckEntry.workflowStatus = 'canceled';
+    truckEntry.currentStatus = 'canceled';
+    truckEntry.currentAction = null;
+    truckEntry.currentAllowedRole = null;
+    truckEntry.currentAllowedStop = null;
+    truckEntry.nextRole = null;
+    truckEntry.nextStop = null;
+    truckEntry.movementStatus = null;
+    truckEntry.canceledAt = canceledAt;
+    truckEntry.updates.push({
+      stop: cancelStop,
+      status: 'canceled',
+      updatedAt: canceledAt,
+      teamName: req.user ? getTeamName(req.user) : undefined,
+      memberId: req.user?._id,
+      memberName: req.user?.name,
+      remarks: typeof body.remarks === 'string' ? body.remarks.trim() : undefined,
+    });
+
+    await truckEntry.save();
+
+    return res.status(200).json({
+      message: 'Truck entry canceled successfully',
+      truckEntry: serializeTruckEntry(truckEntry),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const markGateReturnEntry = async (req, res, next) => {
   if (normalizeStop(req.user.role) !== 'gate') {
     return res.status(403).json({ success: false, message: 'You do not have permission' });
@@ -932,6 +1030,7 @@ module.exports = {
   createTruckEntry,
   getTruckEntries,
   getTruckEntryById,
+  cancelTruckEntry,
   markGateReturnEntry,
   markTeamEntry,
   markTeamExit,

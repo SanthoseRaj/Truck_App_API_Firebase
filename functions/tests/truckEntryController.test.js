@@ -5,6 +5,7 @@ const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
 const {
   createTruckEntry,
+  cancelTruckEntry,
   getWorkflowState,
   markTeamEntry,
   resolveEntryDestinationUpdate,
@@ -188,6 +189,40 @@ assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedStop, '
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAction, null);
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.workflowStatus, 'pending');
 assert.notStrictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedRole, 'dubai');
+
+const canceledEntry = {
+  ...yardOrigin,
+  workflowStatus: 'canceled',
+  currentStatus: 'canceled',
+  updates: [
+    ...yardOrigin.updates,
+    {
+      stop: 'yard',
+      status: 'canceled',
+      updatedAt: at(2),
+      teamName: 'Owner',
+      memberName: 'Owner User',
+      remarks: 'Duplicate trip',
+    },
+  ],
+};
+const serializedCanceledEntry = serializeTruckEntry(canceledEntry);
+
+assert.deepStrictEqual(getWorkflowState(canceledEntry), {
+  currentAllowedRole: null,
+  currentAllowedStop: null,
+  currentAction: null,
+  workflowStatus: 'canceled',
+  nextRole: null,
+  nextStop: null,
+});
+assert.strictEqual(serializedCanceledEntry.workflowStatus, 'canceled');
+assert.strictEqual(serializedCanceledEntry.currentStatus, 'canceled');
+assert.strictEqual(serializedCanceledEntry.currentAllowedRole, null);
+assert.strictEqual(serializedCanceledEntry.currentAllowedStop, null);
+assert.strictEqual(serializedCanceledEntry.currentAction, null);
+assert.strictEqual(serializedCanceledEntry.nextStop, null);
+assert.strictEqual(serializedCanceledEntry.movementStatus, undefined);
 
 assert.strictEqual(validateOriginCycle('yard', null), null);
 assert.strictEqual(validateOriginCycle('yard', { destination: 'dubai' }), null);
@@ -403,6 +438,46 @@ const callMarkTeamEntry = async ({ entry, body = {}, role = 'gate' }) => {
   return res;
 };
 
+const callCancelTruckEntry = async ({ entry, body = {}, role = 'admin' }) => {
+  const originalFindById = TruckEntry.findById;
+  const res = {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+  let nextError = null;
+
+  TruckEntry.findById = () => ({
+    populate: async () => entry,
+  });
+
+  try {
+    await cancelTruckEntry(
+      {
+        params: { id: validTruckId },
+        body,
+        user: { _id: validTruckId, role, name: 'Admin User', entryTeam: { name: 'Admin Team' } },
+      },
+      res,
+      (error) => {
+        nextError = error;
+      }
+    );
+  } finally {
+    TruckEntry.findById = originalFindById;
+  }
+
+  assert.strictEqual(nextError, null);
+  return res;
+};
+
 (async () => {
   const yardFreezone = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
@@ -529,6 +604,22 @@ const callMarkTeamEntry = async ({ entry, body = {}, role = 'gate' }) => {
   assert.strictEqual(pendingFreeZoneDuplicate.statusCode, 409);
   assert.strictEqual(pendingFreeZoneDuplicate.body.message, 'Duplicate active truck entry already exists');
 
+  const canceledPreviousEntry = {
+    ...makePendingDubaiReturnToYardEntry(),
+    workflowStatus: 'canceled',
+    currentStatus: 'canceled',
+    updates: [
+      ...makePendingDubaiReturnToYardEntry().updates,
+      { stop: 'clearence', status: 'canceled', updatedAt: at(8) },
+    ],
+  };
+  const afterCanceledPreviousEntry = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [canceledPreviousEntry],
+  });
+
+  assert.strictEqual(afterCanceledPreviousEntry.statusCode, 201);
+
   const gateCompletionEntry = {
     ...completedGateOrigin,
     save: async () => {},
@@ -545,6 +636,56 @@ const callMarkTeamEntry = async ({ entry, body = {}, role = 'gate' }) => {
     'Use gate-return-entry endpoint to complete Free Zone return and create next trip'
   );
   assert.strictEqual(getWorkflowState(gateCompletionEntry).workflowStatus, 'pending');
+
+  const entryTeamCancelAttemptEntry = {
+    ...completedGateOrigin,
+    save: async () => {
+      throw new Error('entry team should not be able to cancel trips');
+    },
+    populate: async () => {},
+  };
+  const entryTeamCancelAttempt = await callCancelTruckEntry({
+    entry: entryTeamCancelAttemptEntry,
+    role: 'freezone',
+    body: { canceledAt: '2026-05-01T08:09:00.000Z', remarks: 'Assigned stop attempt' },
+  });
+
+  assert.strictEqual(entryTeamCancelAttempt.statusCode, 403);
+  assert.strictEqual(entryTeamCancelAttempt.body.message, 'Only admin can cancel trips');
+  assert.strictEqual(entryTeamCancelAttemptEntry.workflowStatus, completedGateOrigin.workflowStatus);
+  assert.strictEqual(entryTeamCancelAttemptEntry.currentStatus, completedGateOrigin.currentStatus);
+
+  const cancelableEntry = {
+    ...completedGateOrigin,
+    save: async () => {},
+    populate: async () => {},
+  };
+  const canceledTrip = await callCancelTruckEntry({
+    entry: cancelableEntry,
+    body: { canceledAt: '2026-05-01T08:09:00.000Z', remarks: 'Customer request' },
+  });
+
+  assert.strictEqual(canceledTrip.statusCode, 200);
+  assert.strictEqual(canceledTrip.body.truckEntry.workflowStatus, 'canceled');
+  assert.strictEqual(canceledTrip.body.truckEntry.currentStatus, 'canceled');
+  assert.strictEqual(cancelableEntry.workflowStatus, 'canceled');
+  assert.strictEqual(cancelableEntry.currentStatus, 'canceled');
+  assert.strictEqual(cancelableEntry.currentAction, null);
+  assert.strictEqual(cancelableEntry.currentAllowedRole, null);
+  assert.strictEqual(cancelableEntry.currentAllowedStop, null);
+  assert.strictEqual(cancelableEntry.nextRole, null);
+  assert.strictEqual(cancelableEntry.nextStop, null);
+  assert.strictEqual(cancelableEntry.movementStatus, null);
+  assert.strictEqual(cancelableEntry.truckId, baseEntry.truckId);
+  assert.deepStrictEqual(cancelableEntry.updates.at(-1), {
+    stop: 'freezone',
+    status: 'canceled',
+    updatedAt: new Date('2026-05-01T08:09:00.000Z'),
+    teamName: 'Admin Team',
+    memberId: validTruckId,
+    memberName: 'Admin User',
+    remarks: 'Customer request',
+  });
 
   for (const truckModel of ['2 Axle', '3 Axle', '6 Wheel']) {
     let createdPayload = null;

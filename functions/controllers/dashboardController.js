@@ -6,6 +6,7 @@ const { serializeTruckEntry } = require('./truckEntryController');
 const { getDashboardRouteLabelsForTruckEntry } = require('../utils/dashboardRouteGrouping');
 
 const getRouteForTruckEntry = (truckEntry) => {
+  if (truckEntry.workflowStatus === 'canceled' || truckEntry.currentStatus === 'canceled') return null;
   if (!['exit', 'moving'].includes(truckEntry.currentStatus)) return null;
 
   return getDashboardRouteLabelsForTruckEntry(truckEntry);
@@ -14,6 +15,9 @@ const getRouteForTruckEntry = (truckEntry) => {
 const getActiveTruckEntries = () =>
   TruckEntry.find({
     isDeleted: { $ne: true },
+    workflowStatus: { $ne: 'canceled' },
+    currentStatus: { $ne: 'canceled' },
+    'updates.status': { $ne: 'canceled' },
     $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
   }).sort('-createdAt');
 

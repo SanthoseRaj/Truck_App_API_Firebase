@@ -34,6 +34,15 @@ const truckEntries = [
     currentStatus: 'entry',
     nextStop: null,
   },
+  {
+    _id: 'canceled-after-clearence',
+    headTruckNumber: 'HT-CANCELED',
+    destination: 'dubai',
+    currentStop: 'clearence',
+    currentStatus: 'exit',
+    workflowStatus: 'canceled',
+    nextStop: null,
+  },
 ];
 
 const routes = buildRouteStatsFromTruckEntries(truckEntries);

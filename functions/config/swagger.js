@@ -226,6 +226,7 @@ const swaggerOptions = {
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },
             exitAt: { type: 'string', format: 'date-time', example: '2026-05-13T21:10:00.000' },
             teamName: { type: 'string', example: 'Yard Entry Team' },
+            memberId: { type: 'string', example: 'USER_OBJECT_ID' },
             memberName: { type: 'string', example: 'Yard Member' },
             remarks: { type: 'string', example: 'Checked and approved' },
           },
@@ -255,7 +256,7 @@ const swaggerOptions = {
               enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
-            currentStatus: { type: 'string', enum: ['entry', 'exit', 'completed'], example: 'entry' },
+            currentStatus: { type: 'string', enum: ['entry', 'exit', 'completed', 'canceled'], example: 'entry' },
             updates: {
               type: 'array',
               items: { $ref: '#/components/schemas/TruckEntryUpdate' },
@@ -270,8 +271,8 @@ const swaggerOptions = {
               enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'gate',
             },
-            currentAction: { type: 'string', enum: ['entry', 'exit'], example: 'entry' },
-            workflowStatus: { type: 'string', enum: ['pending', 'completed'], example: 'pending' },
+            currentAction: { type: 'string', enum: ['entry', 'exit'], nullable: true, example: 'entry' },
+            workflowStatus: { type: 'string', enum: ['pending', 'completed', 'canceled'], example: 'pending' },
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },
             exitAt: { type: 'string', format: 'date-time', example: '2026-05-13T21:10:00.000' },
             createdAt: { type: 'string', format: 'date-time' },
@@ -327,6 +328,13 @@ const swaggerOptions = {
           properties: {
             exitAt: { type: 'string', format: 'date-time', example: '2026-05-13T21:10:00.000' },
             remarks: { type: 'string', example: 'Gate exit completed' },
+          },
+        },
+        TruckEntryCancelInput: {
+          type: 'object',
+          properties: {
+            canceledAt: { type: 'string', format: 'date-time', example: '2026-05-13T21:15:00.000Z' },
+            remarks: { type: 'string', example: 'Trip canceled by operations' },
           },
         },
         Trip: {

@@ -3,6 +3,7 @@ const {
   createTruckEntry,
   getTruckEntries,
   getTruckEntryById,
+  cancelTruckEntry,
   markGateReturnEntry,
   markTeamEntry,
   markTeamExit,
@@ -83,6 +84,38 @@ router.get('/', allowRoles(...truckEntryReaders), getTruckEntries);
  *         description: Duplicate active truck entry
  */
 router.patch('/:id/gate-return-entry', allowRoles('gate'), markGateReturnEntry);
+
+/**
+ * @swagger
+ * /api/truck-entries/{id}/cancel:
+ *   patch:
+ *     summary: Cancel a truck entry trip without deleting the truck master record
+ *     tags: [Truck Entries]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TruckEntryCancelInput'
+ *     responses:
+ *       200:
+ *         description: Truck entry canceled
+ *       400:
+ *         description: Validation error or already canceled entry
+ *       403:
+ *         description: Only admin can cancel trips
+ *       404:
+ *         description: Truck entry not found
+ */
+router.patch('/:id/cancel', cancelTruckEntry);
 
 /**
  * @swagger

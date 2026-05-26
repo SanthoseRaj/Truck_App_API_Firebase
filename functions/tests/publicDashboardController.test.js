@@ -75,6 +75,16 @@ const publicEntries = [
 ];
 
 const counts = buildDashboardCounts(publicEntries);
+const canceledPublicEntry = serializePublicTruckEntry({
+  ...baseEntry,
+  _id: 'entry-canceled',
+  workflowStatus: 'canceled',
+  currentStatus: 'canceled',
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(1) },
+    { stop: 'yard', status: 'canceled', updatedAt: at(2) },
+  ],
+});
 const waitingAtCustomClearence = serializePublicTruckEntry(
   makeEntry('entry-clearence', 'HT-105', 'TT-105', [
     { stop: 'yard', status: 'entry', updatedAt: at(1) },
@@ -118,6 +128,11 @@ assert.strictEqual(publicEntries[3].currentAllowedRole, null);
 assert.strictEqual(publicEntries[3].currentAction, null);
 assert.strictEqual(publicEntries[3].updates.at(-1).stop, 'dubai');
 assert.strictEqual(publicEntries[3].updates.at(-1).destination, 'dubai');
+assert.strictEqual(canceledPublicEntry.workflowStatus, 'canceled');
+assert.strictEqual(canceledPublicEntry.currentStatus, 'canceled');
+assert.strictEqual(canceledPublicEntry.currentAllowedRole, null);
+assert.strictEqual(canceledPublicEntry.currentAllowedStop, null);
+assert.strictEqual(canceledPublicEntry.currentAction, null);
 assert.strictEqual(waitingAtCustomClearence.currentAllowedRole, 'clearence');
 assert.strictEqual(waitingAtCustomClearence.currentAllowedStop, 'clearence');
 assert.strictEqual(waitingAtCustomClearence.currentAction, 'exit');
@@ -375,6 +390,32 @@ assert.deepStrictEqual(pendingFreeZoneToGateCounts, {
 const completedDubaiCounts = buildDashboardCounts([publicEntries[3]]);
 
 assert.deepStrictEqual(completedDubaiCounts, {
+  totalActive: 0,
+  totalTrucks: 0,
+  moving: 0,
+  exitedDubai: 0,
+  stops: {
+    yard: 0,
+    gate: 0,
+    port: 0,
+    clearence: 0,
+    dubai: 0,
+    freezone: 0,
+  },
+  routes: {
+    yardToGate: 0,
+    gateToPort: 0,
+    portToClearence: 0,
+    clearenceToDubai: 0,
+    clearenceToFreezone: 0,
+    dubaiToYard: 0,
+    freezoneToGate: 0,
+  },
+});
+
+const canceledCounts = buildDashboardCounts([canceledPublicEntry]);
+
+assert.deepStrictEqual(canceledCounts, {
   totalActive: 0,
   totalTrucks: 0,
   moving: 0,
