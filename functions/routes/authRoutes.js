@@ -140,21 +140,21 @@ router.post('/members', protect, allowRoles('owner', 'admin'), createMember);
  *         name: entryTeamId
  *         schema:
  *           type: string
- *           enum: [yard, gate, port, clearence, dubai, freezone]
+ *           enum: [yard, port, clearence, dubai, freezone]
  *         required: false
  *         description: Filter members by entry team id
  *       - in: query
  *         name: entryTeamStop
  *         schema:
  *           type: string
- *           enum: [Yard, Gate, Port Loading, Custom Clearence, Dubai, Free Zone]
+ *           enum: [Yard, Port Loading, Custom Clearence, Dubai, Free Zone]
  *         required: false
  *         description: Filter members by entry team stop
  *       - in: query
  *         name: role
  *         schema:
  *           type: string
- *           enum: [yard, gate, port, clearence, dubai, freezone]
+ *           enum: [yard, port, clearence, dubai, freezone]
  *         required: false
  *         description: Filter members by role
  *     responses:

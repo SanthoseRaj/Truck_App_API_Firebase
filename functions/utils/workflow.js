@@ -1,4 +1,4 @@
-const workflowBaseStops = ['yard', 'gate', 'port', 'clearence'];
+const workflowBaseStops = ['yard', 'port', 'clearence'];
 const workflowTerminalStops = ['dubai', 'freezone'];
 const workflowRoles = ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
 const exitOnlyWorkflowStops = ['clearence'];
@@ -8,7 +8,7 @@ const normalizeStop = (stop, destination = null) => {
 
   const normalized = stop.toString().trim().toLowerCase().replace(/[\s_-]+/g, '');
 
-  if (normalized === 'portloading') return 'port';
+  if (normalized === 'gate' || normalized === 'portloading') return 'port';
   if (normalized === 'customclearance' || normalized === 'customclearence') return 'clearence';
   if (normalized === 'freezone') return 'freezone';
   if (normalized === 'dubaifreezone') return destination === 'freezone' ? 'freezone' : 'dubai';
@@ -38,7 +38,10 @@ const getNextStopForDestination = (stop, destination, originStop = 'yard') => {
   return index >= 0 && index < stops.length - 1 ? stops[index + 1] : null;
 };
 
-const getReturnRouteForDestination = (destination) => (destination === 'freezone' ? 'freezoneToGate' : 'dubaiToYard');
+const getReturnRouteForDestination = (destination) =>
+  destination === 'freezone' ? 'freezoneToPortLoading' : 'dubaiToYard';
+
+const toApiStop = (stop) => (normalizeStop(stop) === 'port' ? 'portLoading' : normalizeStop(stop));
 
 const requiresEntryForStop = (stop) => !exitOnlyWorkflowStops.includes(normalizeStop(stop));
 
@@ -52,4 +55,5 @@ module.exports = {
   getWorkflowStopsForDestination,
   getNextStopForDestination,
   getReturnRouteForDestination,
+  toApiStop,
 };

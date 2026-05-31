@@ -92,7 +92,7 @@ const createTruck = async (req, res, next) => {
 
 const getTrucks = async (req, res, next) => {
   try {
-    const isManager = ['owner', 'admin', 'yard', 'gate'].includes(req.user.role);
+    const isManager = ['owner', 'admin', 'yard', 'gate', 'port'].includes(req.user.role);
     const includeInactive = isManager && req.query.includeInactive === 'true';
     const filter = includeInactive ? {} : { isActive: true };
     const trucks = await Truck.find(filter).sort('headTruckNumber');

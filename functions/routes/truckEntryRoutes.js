@@ -13,7 +13,7 @@ const { allowRoles } = require('../middleware/roleMiddleware');
 
 const router = express.Router();
 const truckEntryReaders = ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'];
-const truckEntryCreators = ['owner', 'admin', 'yard', 'gate'];
+const truckEntryCreators = ['owner', 'admin', 'yard', 'gate', 'port'];
 
 router.use(protect);
 
@@ -61,7 +61,7 @@ router.get('/', allowRoles(...truckEntryReaders), getTruckEntries);
  * @swagger
  * /api/truck-entries/{id}/gate-return-entry:
  *   patch:
- *     summary: Complete a Free Zone return at Gate and create the next trip atomically
+ *     summary: Complete a Free Zone return at Port Loading and create the next trip atomically
  *     tags: [Truck Entries]
  *     security:
  *       - bearerAuth: []
@@ -75,15 +75,15 @@ router.get('/', allowRoles(...truckEntryReaders), getTruckEntries);
  *       200:
  *         description: Free Zone return completed and next trip created
  *       400:
- *         description: Validation error or trip not ready for Gate return
+ *         description: Validation error or trip not ready for Port Loading return
  *       403:
- *         description: User is not assigned to Gate
+ *         description: User is not assigned to Port Loading
  *       404:
  *         description: Truck entry, truck, ship, or supplier not found
  *       409:
  *         description: Duplicate active truck entry
  */
-router.patch('/:id/gate-return-entry', allowRoles('gate'), markGateReturnEntry);
+router.patch('/:id/gate-return-entry', allowRoles('gate', 'port'), markGateReturnEntry);
 
 /**
  * @swagger

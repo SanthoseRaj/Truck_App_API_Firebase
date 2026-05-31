@@ -11,6 +11,7 @@ const {
   requiresEntryForStop,
   getWorkflowStopsForDestination,
   getNextStopForDestination,
+  toApiStop,
 } = require('../utils/workflow');
 const {
   formatSelectedLocalDateTime,
@@ -36,7 +37,7 @@ const requiredFields = [
 
 const stringFields = requiredFields.filter((field) => field !== 'tripTime');
 const adminRoles = ['owner', 'admin'];
-const originStops = ['yard', 'gate'];
+const originStops = ['yard', 'gate', 'port', 'portloading'];
 const finishTripUpdateFields = [
   'tripNumber',
   'driverName',
@@ -58,17 +59,25 @@ const parseIsoDateTime = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const isValidOriginStop = (originStop) => originStop === undefined || originStops.includes(originStop);
+const toStoredOriginStop = (originStop) => {
+  const normalized = normalizeOriginStop(originStop);
+  if (normalized === undefined) return undefined;
+  if (normalized === null) return null;
+  if (normalized === 'gate' || normalized === 'port' || normalized === 'portloading') return 'portLoading';
+  return normalized;
+};
+const toWorkflowOriginStop = (originStop) => normalizeStop(originStop) || 'yard';
+const isValidOriginStop = (originStop) => originStop === undefined || originStop === null || originStops.includes(originStop);
 const normalizeOriginStop = (originStop) => {
   if (originStop === undefined) return undefined;
   if (originStop === null) return null;
   return originStop.toString().trim().toLowerCase();
 };
-const getOriginStop = (truckEntry) => truckEntry.originStop || 'yard';
+const getOriginStop = (truckEntry) => toStoredOriginStop(truckEntry.originStop) || 'yard';
 const getWorkflowStops = (truckEntry) =>
-  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), toWorkflowOriginStop(getOriginStop(truckEntry)));
 const getNextRouteStop = (stop, truckEntry) =>
-  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), toWorkflowOriginStop(getOriginStop(truckEntry)));
 const isCompletedFreeZoneDestination = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
 
@@ -101,7 +110,7 @@ const validateRequiredFields = (body) => {
   }
 
   if (!isValidOriginStop(normalizeOriginStop(body.originStop))) {
-    return 'originStop must be either yard or gate';
+    return 'originStop must be either yard or portLoading';
   }
 
   return null;
@@ -152,12 +161,12 @@ const getWorkflowState = (truckEntry) => {
   if (hasCompletedUpdate(truckEntry)) {
     if (isCompletedFreeZoneDestination(truckEntry)) {
       return {
-        currentAllowedRole: 'gate',
-        currentAllowedStop: 'gate',
+        currentAllowedRole: 'port',
+        currentAllowedStop: 'port',
         currentAction: null,
         workflowStatus: 'completed',
-        nextRole: 'gate',
-        nextStop: 'gate',
+        nextRole: 'port',
+        nextStop: 'port',
       };
     }
 
@@ -210,14 +219,22 @@ const getWorkflowState = (truckEntry) => {
   }
 
   return {
-    currentAllowedRole: 'gate',
-    currentAllowedStop: 'gate',
+    currentAllowedRole: 'port',
+    currentAllowedStop: 'port',
     currentAction: 'entry',
     workflowStatus: 'pending',
-    nextRole: 'gate',
-    nextStop: 'gate',
+    nextRole: 'port',
+    nextStop: 'port',
   };
 };
+
+const serializeWorkflowState = (workflowState) => ({
+  ...workflowState,
+  currentAllowedRole: toApiStop(workflowState.currentAllowedRole),
+  currentAllowedStop: toApiStop(workflowState.currentAllowedStop),
+  nextRole: toApiStop(workflowState.nextRole),
+  nextStop: toApiStop(workflowState.nextStop),
+});
 
 const serializeTruckEntry = (truckEntry) => {
   const entry = truckEntry.toObject ? truckEntry.toObject() : truckEntry;
@@ -228,7 +245,7 @@ const serializeTruckEntry = (truckEntry) => {
     const stop = normalizeStop(update.stop, normalizeDestination(entry.destination));
     return {
       ...serializedUpdate,
-      stop,
+      stop: toApiStop(stop),
       ...(updateDestination ? { destination: normalizeDestination(updateDestination) } : {}),
       updatedAt: selectedAt,
       crossedAt: selectedAt,
@@ -242,13 +259,13 @@ const serializeTruckEntry = (truckEntry) => {
   const latestExit = [...updates].reverse().find((update) => normalizeText(update.status) === 'exit');
   const workflowState = getWorkflowState(entry);
   const latestUpdate = [...updates].reverse()[0] || null;
-  const latestStop = normalizeText(latestUpdate?.stop) || null;
+  const latestStop = normalizeStop(latestUpdate?.stop, destination) || null;
   const latestStatus = normalizeText(latestUpdate?.status) || null;
   const currentStatus =
     workflowState.workflowStatus === 'completed' || workflowState.workflowStatus === 'canceled'
       ? workflowState.workflowStatus
       : latestStatus;
-  const isFreeZoneToGateMoving =
+  const isFreeZoneToPortMoving =
     workflowState.workflowStatus !== 'canceled' &&
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     latestStop === 'freezone' &&
@@ -256,9 +273,10 @@ const serializeTruckEntry = (truckEntry) => {
   const nextStop =
     ['completed', 'canceled'].includes(workflowState.workflowStatus)
       ? null
-      : isFreeZoneToGateMoving
-        ? 'gate'
+      : isFreeZoneToPortMoving
+        ? 'port'
         : getNextRouteStop(latestStop, entry);
+  const apiWorkflowState = serializeWorkflowState(workflowState);
 
   return {
     ...entry,
@@ -271,16 +289,17 @@ const serializeTruckEntry = (truckEntry) => {
     updates,
     ...(yardEntry ? { entryAt: yardEntry.updatedAt } : {}),
     ...(latestExit ? { exitAt: latestExit.updatedAt } : {}),
-    ...workflowState,
-    currentStop: latestStop,
+    ...apiWorkflowState,
+    currentStop: toApiStop(latestStop),
     currentStatus,
-    nextStop,
-    ...(isFreeZoneToGateMoving
+    nextStop: toApiStop(nextStop),
+    backendNextStop: toApiStop(nextStop),
+    ...(isFreeZoneToPortMoving
       ? {
           currentLocation: 'Moving',
           from: 'Free Zone',
-          to: 'Gate',
-          movementStatus: 'Free Zone to Gate',
+          to: 'Port Loading',
+          movementStatus: 'freezoneToPort',
         }
       : {}),
   };
@@ -330,14 +349,14 @@ const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updat
   return previousEntry;
 };
 
-const completeFreeZoneEntryAtGate = (truckEntry, user, updatedAt, remarks = undefined) => {
+const completeFreeZoneEntryAtPortLoading = (truckEntry, user, updatedAt, remarks = undefined) => {
   truckEntry.updates.push({
-    stop: 'gate',
+    stop: 'portLoading',
     status: 'completed',
     updatedAt,
     teamName: getTeamName(user),
     memberName: user.name,
-    remarks: remarks || 'Free Zone destination trip completed at Gate entry',
+    remarks: remarks || 'Free Zone destination trip completed at Port Loading entry',
   });
 };
 
@@ -427,6 +446,19 @@ const buildTruckEntryPayload = (body, truck, ship, supplier, originStop, entryAt
   ],
 });
 
+const getNextTripTime = (existingTrip, fallbackTripTime) => {
+  const currentTripTime = Number(existingTrip?.tripTime);
+  return Number.isFinite(currentTripTime) ? currentTripTime + 1 : Number(fallbackTripTime);
+};
+
+const getEntryId = (entry) => (entry?._id === undefined || entry?._id === null ? entry?.id : entry._id);
+const isSameTruckEntry = (entry, otherEntryOrId) => {
+  const entryId = getEntryId(entry);
+  const otherId = typeof otherEntryOrId === 'object' ? getEntryId(otherEntryOrId) : otherEntryOrId;
+
+  return entryId !== undefined && otherId !== undefined && String(entryId) === String(otherId);
+};
+
 const validateNextTripForGateReturn = async (body, existingTrip, session) => {
   const validationError = validateRequiredFields(body);
 
@@ -437,8 +469,8 @@ const validateNextTripForGateReturn = async (body, existingTrip, session) => {
   const originStopUpdate = resolveOriginStopForDestination(body.destination, body.originStop);
 
   if (originStopUpdate.error) return { error: originStopUpdate.error };
-  if (originStopUpdate.originStop !== 'gate') {
-    return { error: { status: 400, message: 'nextTrip originStop must be gate' } };
+  if (originStopUpdate.originStop !== 'portLoading') {
+    return { error: { status: 400, message: 'nextTrip originStop must be portLoading' } };
   }
 
   if (!mongoose.isValidObjectId(body.shipId)) {
@@ -501,8 +533,8 @@ const validateOriginCycle = (originStop, latestCompletedEntry) => {
     return 'This truck completed Dubai, so the next trip can be added only at Yard';
   }
 
-  if (latestDestination === 'freezone' && originStop !== 'gate') {
-    return 'This truck completed Free Zone, so the next trip can be added only at Gate';
+  if (latestDestination === 'freezone' && toWorkflowOriginStop(originStop) !== 'port') {
+    return 'This truck completed Free Zone, so the next trip can be added only at Port Loading';
   }
 
   return null;
@@ -516,10 +548,10 @@ const resolveOriginStopForDestination = (destination, submittedOriginStop) => {
   }
 
   if (normalizedOriginStop !== undefined && !isValidOriginStop(normalizedOriginStop)) {
-    return { error: { status: 400, message: 'originStop must be either yard or gate' } };
+    return { error: { status: 400, message: 'originStop must be either yard or portLoading' } };
   }
 
-  return { originStop: normalizedOriginStop || 'yard' };
+  return { originStop: toStoredOriginStop(normalizedOriginStop) || 'yard' };
 };
 
 const createTruckEntry = async (req, res, next) => {
@@ -726,7 +758,7 @@ const cancelTruckEntry = async (req, res, next) => {
 };
 
 const markGateReturnEntry = async (req, res, next) => {
-  if (normalizeStop(req.user.role) !== 'gate') {
+  if (normalizeStop(req.user.role) !== 'port') {
     return res.status(403).json({ success: false, message: 'You do not have permission' });
   }
 
@@ -777,12 +809,12 @@ const markGateReturnEntry = async (req, res, next) => {
       if (
         normalizeDestination(truckEntry.destination) !== 'freezone' ||
         workflowState.workflowStatus === 'completed' ||
-        workflowState.currentAllowedRole !== 'gate' ||
-        workflowState.currentAllowedStop !== 'gate' ||
+        workflowState.currentAllowedRole !== 'port' ||
+        workflowState.currentAllowedStop !== 'port' ||
         workflowState.currentAction !== 'entry' ||
-        serializedReturningTrip.movementStatus !== 'Free Zone to Gate'
+        serializedReturningTrip.movementStatus !== 'freezoneToPort'
       ) {
-        const error = new Error('Truck entry is not ready for Free Zone return Gate entry');
+        const error = new Error('Truck entry is not ready for Free Zone return Port Loading entry');
         error.status = 400;
         throw error;
       }
@@ -817,8 +849,9 @@ const markGateReturnEntry = async (req, res, next) => {
       );
       const duplicateOpenEntry = existingEntries.some(
         (entry) =>
-          String(entry._id) !== String(truckEntry._id) &&
-          getWorkflowState(entry).workflowStatus !== 'completed'
+          !isSameTruckEntry(entry, truckEntry) &&
+          !isSameTruckEntry(entry, req.params.id) &&
+          !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus)
       );
 
       if (duplicateOpenEntry) {
@@ -827,23 +860,10 @@ const markGateReturnEntry = async (req, res, next) => {
         throw error;
       }
 
-      truckEntry.updates.push({
-        stop: 'gate',
-        status: 'entry',
-        updatedAt: entryAt,
-        teamName: getTeamName(req.user),
-        memberName: req.user.name,
-        remarks: trimString(finishTripUpdates.remarks),
-      });
-      completeFreeZoneEntryAtGate(truckEntry, req.user, entryAt, trimString(finishTripUpdates.remarks));
-      truckEntry.completedAt = entryAt;
-      truckEntry.completedLocation = 'gate';
-
-      await truckEntry.save({ session });
-
       const nextTripPayload = buildTruckEntryPayload(
         {
           ...nextTrip,
+          tripTime: getNextTripTime(truckEntry, nextTrip.tripTime),
           entryAt: nextTrip.entryAt || entryAt,
         },
         nextTripValidation.truck,
@@ -854,6 +874,28 @@ const markGateReturnEntry = async (req, res, next) => {
         req.user
       );
       const createdTrips = await TruckEntry.create([nextTripPayload], { session });
+
+      truckEntry.updates.push({
+        stop: 'portLoading',
+        status: 'entry',
+        updatedAt: entryAt,
+        teamName: getTeamName(req.user),
+        memberName: req.user.name,
+        remarks: trimString(finishTripUpdates.remarks),
+      });
+      completeFreeZoneEntryAtPortLoading(truckEntry, req.user, entryAt, trimString(finishTripUpdates.remarks));
+      truckEntry.completedAt = entryAt;
+      truckEntry.completedLocation = 'portLoading';
+      truckEntry.workflowStatus = 'completed';
+      truckEntry.currentStatus = 'completed';
+      truckEntry.currentAction = null;
+      truckEntry.currentAllowedRole = null;
+      truckEntry.currentAllowedStop = null;
+      truckEntry.nextRole = null;
+      truckEntry.nextStop = null;
+      truckEntry.movementStatus = null;
+
+      await truckEntry.save({ session });
 
       completedTrip = truckEntry;
       newTrip = createdTrips[0];
@@ -867,7 +909,7 @@ const markGateReturnEntry = async (req, res, next) => {
     const counts = buildDashboardCounts(serializedTruckEntries);
 
     return res.status(200).json({
-      message: 'Free Zone return Gate entry completed and next trip created successfully',
+      message: 'Free Zone return Port Loading entry completed and next trip created successfully',
       completedTrip: serializeTruckEntry(completedTrip),
       newTrip: serializeTruckEntry(newTrip),
       counts,
@@ -979,7 +1021,7 @@ const appendWorkflowUpdate = async (req, res, next, action) => {
 
     if (
       action === 'entry' &&
-      normalizeStop(req.user.role, normalizeDestination(truckEntry.destination)) === 'gate' &&
+      normalizeStop(req.user.role, normalizeDestination(truckEntry.destination)) === 'port' &&
       isFreeZoneEntryReadyForGateCompletion(truckEntry)
     ) {
       return res.status(400).json({

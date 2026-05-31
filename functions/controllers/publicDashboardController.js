@@ -5,6 +5,7 @@ const {
   requiresEntryForStop,
   getWorkflowStopsForDestination,
   getNextStopForDestination,
+  toApiStop,
 } = require('../utils/workflow');
 const { formatSelectedLocalDateTime } = require('../utils/selectedLocalDateTime');
 const { getDashboardCountRouteKeyForTruckEntry } = require('../utils/dashboardRouteGrouping');
@@ -13,9 +14,12 @@ const { normalizeTruckModel } = require('../utils/truckModel');
 const dashboardDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const normalizeText = (value) => value?.toString().toLowerCase().trim();
-const getOriginStop = (truckEntry) => truckEntry.originStop || 'yard';
+const getOriginStop = (truckEntry) => {
+  const normalized = normalizeStop(truckEntry.originStop);
+  return normalized === 'port' ? 'portLoading' : truckEntry.originStop || 'yard';
+};
 const getWorkflowStops = (truckEntry) =>
-  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+  getWorkflowStopsForDestination(normalizeDestination(truckEntry.destination), normalizeStop(getOriginStop(truckEntry)));
 
 const hasUpdate = (truckEntry, stop, status) =>
   (truckEntry.updates || []).some(
@@ -56,7 +60,7 @@ const getLatestUpdate = (truckEntry, range = null) => {
 };
 
 const getNextStopForEntry = (stop, truckEntry) =>
-  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), getOriginStop(truckEntry));
+  getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), normalizeStop(getOriginStop(truckEntry)));
 
 const getWorkflowStatus = (truckEntry) => {
   if (isCanceledTruckEntry(truckEntry)) return 'canceled';
@@ -85,8 +89,8 @@ const getWorkflowState = (truckEntry) => {
   if (hasCompletedUpdate(truckEntry)) {
     if (isCompletedFreeZoneDestination(truckEntry)) {
       return {
-        currentAllowedRole: 'gate',
-        currentAllowedStop: 'gate',
+        currentAllowedRole: 'port',
+        currentAllowedStop: 'port',
         currentAction: null,
       };
     }
@@ -128,8 +132,8 @@ const getWorkflowState = (truckEntry) => {
   }
 
   return {
-    currentAllowedRole: 'gate',
-    currentAllowedStop: 'gate',
+    currentAllowedRole: 'port',
+    currentAllowedStop: 'port',
     currentAction: 'entry',
   };
 };
@@ -194,20 +198,17 @@ const getActiveMapCount = (counts) => {
 
   return (
     (stops.yard || 0) +
-    (stops.gate || 0) +
-    (stops.port || 0) +
     (stops.portLoading || 0) +
     (stops.clearence || 0) +
     (stops.customClearance || 0) +
     (stops.dubai || 0) +
     (stops.freezone || 0) +
-    (routes.yardToGate || 0) +
-    (routes.gateToPort || 0) +
+    (routes.yardToPortLoading || 0) +
     (routes.portToClearence || 0) +
     (routes.clearenceToDubai || 0) +
     (routes.clearenceToFreezone || 0) +
     (routes.dubaiToYard || 0) +
-    (routes.freezoneToGate || 0)
+    (routes.freezoneToPortLoading || 0)
   );
 };
 
@@ -228,14 +229,25 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
   const workflowState =
     workflowStatus === 'completed'
       ? normalizeDestination(entry.destination) === 'freezone'
-        ? { currentAllowedRole: 'gate', currentAllowedStop: 'gate', currentAction: null }
+        ? { currentAllowedRole: 'port', currentAllowedStop: 'port', currentAction: null }
         : { currentAllowedRole: null, currentAllowedStop: null, currentAction: null }
       : getWorkflowState(entry);
-  const isFreeZoneToGateMoving =
+  const apiWorkflowState = {
+    ...workflowState,
+    currentAllowedRole: toApiStop(workflowState.currentAllowedRole),
+    currentAllowedStop: toApiStop(workflowState.currentAllowedStop),
+  };
+  const isFreeZoneToPortMoving =
     workflowStatus !== 'canceled' &&
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     currentStop === 'freezone' &&
     latestStatus === 'exit';
+  const nextStop =
+    ['completed', 'canceled'].includes(workflowStatus)
+      ? null
+      : isFreeZoneToPortMoving
+        ? 'port'
+        : getNextStopForEntry(currentStop, entry);
 
   return {
     _id: entry._id,
@@ -255,22 +267,18 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     dubaiFreeZoneDestination: destination,
     destinationType: destination,
     originStop: getOriginStop(entry),
-    currentStop,
+    currentStop: toApiStop(currentStop),
     currentStatus,
-    nextStop:
-      ['completed', 'canceled'].includes(workflowStatus)
-        ? null
-        : isFreeZoneToGateMoving
-          ? 'gate'
-          : getNextStopForEntry(currentStop, entry),
+    nextStop: toApiStop(nextStop),
+    backendNextStop: toApiStop(nextStop),
     workflowStatus,
-    ...workflowState,
-    ...(isFreeZoneToGateMoving
+    ...apiWorkflowState,
+    ...(isFreeZoneToPortMoving
       ? {
           currentLocation: 'Moving',
           from: 'Free Zone',
-          to: 'Gate',
-          movementStatus: 'Free Zone to Gate',
+          to: 'Port Loading',
+          movementStatus: 'freezoneToPort',
         }
       : {}),
     updates: (entry.updates || []).map((update) => {
@@ -278,7 +286,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
       const status = normalizeText(update.status);
 
       return {
-        stop: normalizeStop(update.stop, destination),
+        stop: toApiStop(normalizeStop(update.stop, destination)),
         status,
         ...(update.destination ? { destination: normalizeDestination(update.destination) } : {}),
         updatedAt: selectedAt,
@@ -300,20 +308,18 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
     exitedDubai: 0,
     stops: {
       yard: 0,
-      gate: 0,
-      port: 0,
+      portLoading: 0,
       clearence: 0,
       dubai: 0,
       freezone: 0,
     },
     routes: {
-      yardToGate: 0,
-      gateToPort: 0,
+      yardToPortLoading: 0,
       portToClearence: 0,
       clearenceToDubai: 0,
       clearenceToFreezone: 0,
       dubaiToYard: 0,
-      freezoneToGate: 0,
+      freezoneToPortLoading: 0,
     },
   };
 
@@ -331,12 +337,14 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
       }
 
       if (isCompletedFreeZoneReadyForGate) {
-        counts.stops.gate += 1;
+        counts.stops.portLoading += 1;
         return;
       }
 
-      if (truckEntry.currentStatus === 'entry' && truckEntry.currentStop in counts.stops) {
-        counts.stops[truckEntry.currentStop] += 1;
+      const currentStop = toApiStop(truckEntry.currentStop);
+
+      if (truckEntry.currentStatus === 'entry' && currentStop in counts.stops) {
+        counts.stops[currentStop] += 1;
         return;
       }
 
@@ -362,14 +370,16 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
 
     if (truckEntry.workflowStatus === 'completed') {
       if (isCompletedFreeZoneReadyForGate) {
-        counts.stops.gate += 1;
+        counts.stops.portLoading += 1;
       }
 
       return;
     }
 
-    if (truckEntry.currentStatus === 'entry' && truckEntry.currentStop in counts.stops) {
-      counts.stops[truckEntry.currentStop] += 1;
+    const currentStop = toApiStop(truckEntry.currentStop);
+
+    if (truckEntry.currentStatus === 'entry' && currentStop in counts.stops) {
+      counts.stops[currentStop] += 1;
     }
 
     if (truckEntry.currentStatus === 'exit' || truckEntry.currentStatus === 'moving') {

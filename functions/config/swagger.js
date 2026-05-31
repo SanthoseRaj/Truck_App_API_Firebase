@@ -36,7 +36,7 @@ const swaggerOptions = {
               type: 'string',
               enum: ['owner', 'admin', 'yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
             },
-            assignedStop: { type: 'string', enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'] },
+            assignedStop: { type: 'string', enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'] },
             entryTeam: {
               $ref: '#/components/schemas/EntryTeam',
             },
@@ -47,23 +47,23 @@ const swaggerOptions = {
           properties: {
             id: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             name: { type: 'string', example: 'Yard Entry Team' },
             stop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
+              enum: ['Yard', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
             },
             role: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             assignedStop: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             order: { type: 'number', example: 1 },
@@ -87,18 +87,18 @@ const swaggerOptions = {
           properties: {
             entryTeamId: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             entryTeamName: { type: 'string', example: 'Yard Entry Team' },
             entryTeamStop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
+              enum: ['Yard', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
             },
             assignedStop: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             name: { type: 'string', example: 'Yard Member' },
@@ -112,18 +112,18 @@ const swaggerOptions = {
           properties: {
             entryTeamId: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             entryTeamName: { type: 'string', example: 'Yard Entry Team' },
             entryTeamStop: {
               type: 'string',
-              enum: ['Yard', 'Gate', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
+              enum: ['Yard', 'Port Loading', 'Custom Clearence', 'Dubai', 'Free Zone'],
               example: 'Yard',
             },
             assignedStop: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'port', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             name: { type: 'string', example: 'Updated Yard Member' },
@@ -250,10 +250,10 @@ const swaggerOptions = {
             destination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
             dubaiFreeZoneDestination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
             destinationType: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
-            originStop: { type: 'string', enum: ['yard', 'gate'], example: 'yard' },
+            originStop: { type: 'string', enum: ['yard', 'portLoading'], example: 'yard' },
             currentStop: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
+              enum: ['yard', 'portLoading', 'clearence', 'dubai', 'freezone'],
               example: 'yard',
             },
             currentStatus: { type: 'string', enum: ['entry', 'exit', 'completed', 'canceled'], example: 'entry' },
@@ -263,13 +263,13 @@ const swaggerOptions = {
             },
             currentAllowedRole: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
-              example: 'gate',
+              enum: ['yard', 'portLoading', 'clearence', 'dubai', 'freezone'],
+              example: 'portLoading',
             },
             currentAllowedStop: {
               type: 'string',
-              enum: ['yard', 'gate', 'port', 'clearence', 'dubai', 'freezone'],
-              example: 'gate',
+              enum: ['yard', 'portLoading', 'clearence', 'dubai', 'freezone'],
+              example: 'portLoading',
             },
             currentAction: { type: 'string', enum: ['entry', 'exit'], nullable: true, example: 'entry' },
             workflowStatus: { type: 'string', enum: ['pending', 'completed', 'canceled'], example: 'pending' },
@@ -312,7 +312,7 @@ const swaggerOptions = {
             driverTdCardNumber: { type: 'string', example: 'ID-88421' },
             truckModel: { type: 'string', enum: ['2 Axle', '3 Axle', '6 Wheel'], example: '6 Wheel' },
             destination: { type: 'string', enum: ['dubai', 'freezone'], example: 'dubai' },
-            originStop: { type: 'string', enum: ['yard', 'gate'], example: 'yard' },
+            originStop: { type: 'string', enum: ['yard', 'portLoading'], example: 'yard' },
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },
           },
         },
@@ -320,14 +320,14 @@ const swaggerOptions = {
           type: 'object',
           properties: {
             entryAt: { type: 'string', format: 'date-time', example: '2026-05-13T20:27:00.000' },
-            remarks: { type: 'string', example: 'Gate entry completed' },
+            remarks: { type: 'string', example: 'Port Loading entry completed' },
           },
         },
         TruckEntryExitUpdateInput: {
           type: 'object',
           properties: {
             exitAt: { type: 'string', format: 'date-time', example: '2026-05-13T21:10:00.000' },
-            remarks: { type: 'string', example: 'Gate exit completed' },
+            remarks: { type: 'string', example: 'Port Loading exit completed' },
           },
         },
         TruckEntryCancelInput: {

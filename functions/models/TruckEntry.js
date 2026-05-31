@@ -123,7 +123,7 @@ const truckEntrySchema = new mongoose.Schema(
     },
     originStop: {
       type: String,
-      enum: ['yard', 'gate'],
+      enum: ['yard', 'gate', 'port', 'portLoading'],
       default: 'yard',
       trim: true,
     },

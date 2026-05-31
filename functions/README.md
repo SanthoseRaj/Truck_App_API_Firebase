@@ -38,7 +38,7 @@ These users are seeded automatically on server start if they do not already exis
 | owner | owner |
 | admin | admin |
 | yard | yard |
-| gate | gate |
+| gate | port (legacy credential) |
 | port | port |
 | clearence | clearence |
 | dubai | dubai |
@@ -76,10 +76,9 @@ These users are seeded automatically on server start if they do not already exis
 ## Stops
 
 1. Yard
-2. Gate
-3. Port Loading
-4. Custom Clearence
-5. Dubai or Free Zone
+2. Port Loading
+3. Custom Clearence
+4. Dubai or Free Zone
 
 ## Notes
 

@@ -13,21 +13,35 @@ const entryTeams = ROUTE_MARKERS.map((marker) => ({
   lng: marker.lng,
 }));
 const entryTeamRoles = entryTeams.map((team) => team.role);
+const memberRoles = ['yard', 'gate', ...entryTeamRoles.filter((role) => role !== 'yard')];
+const normalizeRoleForApi = (role) => (role === 'gate' ? 'port' : role);
+const normalizeEntryTeamForApi = (entryTeam, role) => {
+  if (role === 'gate') {
+    return entryTeams.find((team) => team.role === 'port') || entryTeam;
+  }
+
+  return entryTeam;
+};
 
 const buildToken = (user) =>
-  jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+  jwt.sign({ id: user._id, role: normalizeRoleForApi(user.role) }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 
-const publicUser = (user) => ({
-  id: user._id,
-  name: user.name,
-  username: user.username,
-  mobileNumber: user.mobileNumber,
-  role: user.role,
-  assignedStop: user.entryTeam?.assignedStop || user.entryTeam?.role || user.role,
-  entryTeam: user.entryTeam,
-});
+const publicUser = (user) => {
+  const role = normalizeRoleForApi(user.role);
+  const entryTeam = normalizeEntryTeamForApi(user.entryTeam, user.role);
+
+  return {
+    id: user._id,
+    name: user.name,
+    username: user.username,
+    mobileNumber: user.mobileNumber,
+    role,
+    assignedStop: entryTeam?.assignedStop || entryTeam?.role || role,
+    entryTeam,
+  };
+};
 
 const fullUser = (user) => ({
   ...publicUser(user),
@@ -65,7 +79,7 @@ const releaseInactiveUsername = async (username) => {
 const getMemberById = async (id) =>
   User.findOne({
     _id: id,
-    role: { $in: entryTeamRoles },
+    role: { $in: memberRoles },
   });
 
 const getAdminById = async (id) =>
@@ -78,20 +92,23 @@ const normalizeEntryTeamValue = (value) => {
   if (value === undefined || value === null) return undefined;
 
   const normalized = value.toString().toLowerCase().trim();
+  if (normalized.replace(/[\s_-]+/g, '') === 'gate') return 'port';
   return normalized.replace(/[\s_-]+/g, '') === 'dubaifreezone' ? 'dubai' : normalized;
 };
 
 const findEntryTeam = ({ entryTeamId, entryTeamName, entryTeamStop, assignedStop }) => {
   const normalizedId = normalizeEntryTeamValue(entryTeamId);
   const normalizedName = entryTeamName?.toLowerCase().trim();
-  const normalizedStop = entryTeamStop?.toLowerCase().trim();
+  const legacyGateName = normalizedName === 'gate entry team';
+  const normalizedStop = normalizeEntryTeamValue(entryTeamStop);
   const normalizedAssignedStop = normalizeEntryTeamValue(assignedStop);
 
   return entryTeams.find(
     (team) =>
       team.id === normalizedId ||
       team.name.toLowerCase() === normalizedName ||
-      team.stop.toLowerCase() === normalizedStop ||
+      (legacyGateName && team.role === 'port') ||
+      normalizeEntryTeamValue(team.stop) === normalizedStop ||
       team.assignedStop === normalizedAssignedStop ||
       team.role === normalizedAssignedStop
   );
@@ -332,16 +349,16 @@ const getMembers = async (req, res, next) => {
   try {
     const { entryTeamId, entryTeamStop, role, assignedStop } = req.query;
     const query = {
-      role: { $in: entryTeamRoles },
+      role: { $in: memberRoles },
       isActive: true,
     };
 
     const entryTeam = findEntryTeam({ entryTeamId, entryTeamStop, assignedStop });
 
     if (entryTeam) {
-      query.role = entryTeam.role;
+      query.role = entryTeam.role === 'port' ? { $in: ['port', 'gate'] } : entryTeam.role;
     } else if (role) {
-      const normalizedRole = role.toLowerCase().trim();
+      const normalizedRole = normalizeEntryTeamValue(role);
 
       if (!entryTeamRoles.includes(normalizedRole)) {
         return res.status(400).json({
@@ -350,7 +367,7 @@ const getMembers = async (req, res, next) => {
         });
       }
 
-      query.role = normalizedRole;
+      query.role = normalizedRole === 'port' ? { $in: ['port', 'gate'] } : normalizedRole;
     }
 
     const members = await User.find(query).sort({ 'entryTeam.order': 1, name: 1 });

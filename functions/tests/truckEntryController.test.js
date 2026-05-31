@@ -1,4 +1,5 @@
 const assert = require('assert');
+const mongoose = require('mongoose');
 const Ship = require('../models/Ship');
 const Supplier = require('../models/Supplier');
 const Truck = require('../models/Truck');
@@ -7,6 +8,7 @@ const {
   createTruckEntry,
   cancelTruckEntry,
   getWorkflowState,
+  markGateReturnEntry,
   markTeamEntry,
   resolveEntryDestinationUpdate,
   resolveOriginStopForDestination,
@@ -100,12 +102,12 @@ assert.deepStrictEqual(getWorkflowState(yardOrigin), {
 });
 
 assert.deepStrictEqual(getWorkflowState(gateOrigin), {
-  currentAllowedRole: 'gate',
-  currentAllowedStop: 'gate',
+  currentAllowedRole: 'port',
+  currentAllowedStop: 'port',
   currentAction: 'exit',
   workflowStatus: 'pending',
-  nextRole: 'gate',
-  nextStop: 'gate',
+  nextRole: 'port',
+  nextStop: 'port',
 });
 
 assert.deepStrictEqual(getWorkflowState(waitingAtCustomClearence), {
@@ -127,21 +129,21 @@ assert.deepStrictEqual(getWorkflowState(afterCustomClearenceExit), {
 });
 
 assert.deepStrictEqual(getWorkflowState(completedGateOrigin), {
-  currentAllowedRole: 'gate',
-  currentAllowedStop: 'gate',
+  currentAllowedRole: 'port',
+  currentAllowedStop: 'port',
   currentAction: 'entry',
   workflowStatus: 'pending',
-  nextRole: 'gate',
-  nextStop: 'gate',
+  nextRole: 'port',
+  nextStop: 'port',
 });
 
 assert.deepStrictEqual(getWorkflowState(completedFreeZoneAtGate), {
-  currentAllowedRole: 'gate',
-  currentAllowedStop: 'gate',
+  currentAllowedRole: 'port',
+  currentAllowedStop: 'port',
   currentAction: null,
   workflowStatus: 'completed',
-  nextRole: 'gate',
-  nextStop: 'gate',
+  nextRole: 'port',
+  nextStop: 'port',
 });
 
 const serializedGateOrigin = serializeTruckEntry(gateOrigin);
@@ -156,12 +158,12 @@ const serializedAfterFreeZoneExit = serializeTruckEntry(completedGateOrigin);
 assert.strictEqual(serializedGateOrigin.destination, 'freezone');
 assert.strictEqual(serializedLegacyFreeZone.destination, 'freezone');
 assert.strictEqual(serializedGateOrigin.truckModel, '6 Wheel');
-assert.strictEqual(serializedGateOrigin.originStop, 'gate');
-assert.strictEqual(serializedGateOrigin.currentStop, 'gate');
+assert.strictEqual(serializedGateOrigin.originStop, 'portLoading');
+assert.strictEqual(serializedGateOrigin.currentStop, 'portLoading');
 assert.strictEqual(serializedGateOrigin.currentStatus, 'entry');
-assert.strictEqual(serializedGateOrigin.currentAllowedRole, 'gate');
+assert.strictEqual(serializedGateOrigin.currentAllowedRole, 'portLoading');
 assert.strictEqual(serializedGateOrigin.currentAction, 'exit');
-assert.strictEqual(serializedGateOrigin.nextStop, 'port');
+assert.strictEqual(serializedGateOrigin.nextStop, 'clearence');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAllowedRole, 'clearence');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAllowedStop, 'clearence');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAction, 'exit');
@@ -175,14 +177,14 @@ assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedRole
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedStop, 'freezone');
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAction, 'entry');
 assert.strictEqual(serializedAfterFreeZoneExit.workflowStatus, 'pending');
-assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedRole, 'gate');
-assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedStop, 'gate');
+assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedRole, 'portLoading');
+assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedStop, 'portLoading');
 assert.strictEqual(serializedAfterFreeZoneExit.currentAction, 'entry');
 assert.strictEqual(serializedAfterFreeZoneExit.currentLocation, 'Moving');
 assert.strictEqual(serializedAfterFreeZoneExit.from, 'Free Zone');
-assert.strictEqual(serializedAfterFreeZoneExit.to, 'Gate');
-assert.strictEqual(serializedAfterFreeZoneExit.movementStatus, 'Free Zone to Gate');
-assert.strictEqual(serializedAfterFreeZoneExit.nextStop, 'gate');
+assert.strictEqual(serializedAfterFreeZoneExit.to, 'Port Loading');
+assert.strictEqual(serializedAfterFreeZoneExit.movementStatus, 'freezoneToPort');
+assert.strictEqual(serializedAfterFreeZoneExit.nextStop, 'portLoading');
 const serializedAfterDubaiCustomClearenceExit = serializeTruckEntry(afterCustomClearenceExit);
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedRole, 'yard');
 assert.strictEqual(serializedAfterDubaiCustomClearenceExit.currentAllowedStop, 'yard');
@@ -228,7 +230,7 @@ assert.strictEqual(validateOriginCycle('yard', null), null);
 assert.strictEqual(validateOriginCycle('yard', { destination: 'dubai' }), null);
 assert.strictEqual(
   validateOriginCycle('yard', { destination: 'freezone' }),
-  'This truck completed Free Zone, so the next trip can be added only at Gate'
+  'This truck completed Free Zone, so the next trip can be added only at Port Loading'
 );
 assert.strictEqual(validateOriginCycle('gate', null), null);
 assert.strictEqual(
@@ -264,7 +266,7 @@ assert.deepStrictEqual(resolveOriginStopForDestination('dubai'), {
   originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('free_zone', 'gate'), {
-  originStop: 'gate',
+  originStop: 'portLoading',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('dubai', 'yard'), {
   originStop: 'yard',
@@ -273,13 +275,13 @@ assert.deepStrictEqual(resolveOriginStopForDestination('freeZone', 'yard'), {
   originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('dubai', 'gate'), {
-  originStop: 'gate',
+  originStop: 'portLoading',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('freeZone', 'YARD'), {
   originStop: 'yard',
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('FREE_ZONE', 'Gate'), {
-  originStop: 'gate',
+  originStop: 'portLoading',
 });
 
 const validShipId = '507f1f77bcf86cd799439011';
@@ -478,6 +480,148 @@ const callCancelTruckEntry = async ({ entry, body = {}, role = 'admin' }) => {
   return res;
 };
 
+const makeFreeZoneReturnTrip = (overrides = {}) => ({
+  ...completedGateOrigin,
+  _id: '507f1f77bcf86cd799439014',
+  truckId: validTruckId,
+  headTruckNumber: 'HT-200',
+  tailTrailerNumber: 'TT-200',
+  supplierName: 'Gulf Supplier',
+  shipId: validShipId,
+  shipName: 'Gulf Star',
+  shipNumber: 'GS-1',
+  tripNumber: 'TRIP-2',
+  tripTime: 2,
+  driverName: 'Driver Two',
+  driverMobile: '971500000001',
+  driverTdCardNumber: 'TD-2',
+  truckModel: '6 Wheel',
+  destination: 'freezone',
+  updates: completedGateOrigin.updates.map((update) => ({ ...update })),
+  save: async () => {},
+  populate: async function populate() {
+    return this;
+  },
+  ...overrides,
+});
+
+const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTripOverrides = {} }) => {
+  const originalStartSession = mongoose.startSession;
+  const originalFindById = TruckEntry.findById;
+  const originalFind = TruckEntry.find;
+  const originalCreate = TruckEntry.create;
+  const originalShipFindById = Ship.findById;
+  const originalTruckFindOne = Truck.findOne;
+  const originalSupplierFindOne = Supplier.findOne;
+  const allEntries = existingEntries || [entry];
+  const res = {
+    statusCode: null,
+    body: null,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.body = payload;
+      return this;
+    },
+  };
+  let nextError = null;
+
+  mongoose.startSession = async () => ({
+    withTransaction: async (callback) => callback(),
+    endSession: () => {},
+  });
+  TruckEntry.findById = () => entry;
+  TruckEntry.find = (criteria) => {
+    if (!criteria) {
+      return {
+        populate: () => ({
+          sort: async () => allEntries,
+        }),
+      };
+    }
+
+    return {
+      sort: async () =>
+        allEntries.filter(
+          (candidate) =>
+            candidate.headTruckNumber === criteria.headTruckNumber &&
+            candidate.tailTrailerNumber === criteria.tailTrailerNumber
+        ),
+    };
+  };
+  TruckEntry.create = async (payloads) => {
+    const created = payloads.map((payload, index) => ({
+      _id: `507f1f77bcf86cd79943902${index}`,
+      ...payload,
+      populate: async function populate() {
+        return this;
+      },
+    }));
+    allEntries.push(...created);
+    return created;
+  };
+  Ship.findById = async () => ({ _id: validShipId });
+  Truck.findOne = async () => ({
+    _id: validTruckId,
+    headTruckNumber: entry.headTruckNumber,
+    tailTrailerNumber: entry.tailTrailerNumber,
+    truckModel: entry.truckModel,
+    isActive: true,
+  });
+  Supplier.findOne = async () => ({
+    _id: '507f1f77bcf86cd799439012',
+    supplierName: 'Gulf Supplier',
+    isActive: true,
+  });
+
+  try {
+    await markGateReturnEntry(
+      {
+        params: { id: String(entry._id) },
+        body: {
+          entryAt: '2026-05-01T08:08',
+          finishTripUpdates: {
+            driverName: 'Driver Three',
+            driverMobile: '971500000003',
+            driverTdCardNumber: 'TD-3',
+            truckModel: '6 Wheel',
+            remarks: 'Return checked',
+          },
+          nextTrip: makeCreateBody({
+            headTruckNumber: entry.headTruckNumber,
+            tailTrailerNumber: entry.tailTrailerNumber,
+            truckModel: entry.truckModel,
+            originStop: 'portloading',
+            destination: 'dubai',
+            tripNumber: 'TRIP-3',
+            tripTime: 1,
+            entryAt: '2026-05-01T08:08',
+            ...nextTripOverrides,
+          }),
+        },
+        user: { role: 'port', name: 'Port Member', entryTeam: { name: 'Port Loading Entry Team' } },
+      },
+      res,
+      (error) => {
+        nextError = error;
+      }
+    );
+  } finally {
+    mongoose.startSession = originalStartSession;
+    TruckEntry.findById = originalFindById;
+    TruckEntry.find = originalFind;
+    TruckEntry.create = originalCreate;
+    Ship.findById = originalShipFindById;
+    Truck.findOne = originalTruckFindOne;
+    Supplier.findOne = originalSupplierFindOne;
+  }
+
+  assert.strictEqual(nextError, null);
+  return { res, allEntries };
+};
+
 (async () => {
   const yardFreezone = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
@@ -495,7 +639,7 @@ const callCancelTruckEntry = async ({ entry, body = {}, role = 'admin' }) => {
 
   assert.strictEqual(gateDubai.statusCode, 201);
   assert.strictEqual(gateDubai.body.truckEntry.destination, 'dubai');
-  assert.strictEqual(gateDubai.body.truckEntry.originStop, 'gate');
+  assert.strictEqual(gateDubai.body.truckEntry.originStop, 'portLoading');
 
   const supplierById = await callCreateTruckEntry({
     body: makeCreateBody({
@@ -527,7 +671,7 @@ const callCancelTruckEntry = async ({ entry, body = {}, role = 'admin' }) => {
   assert.strictEqual(previousFreezoneYardOrigin.statusCode, 400);
   assert.strictEqual(
     previousFreezoneYardOrigin.body.message,
-    'This truck completed Free Zone, so the next trip can be added only at Gate'
+    'This truck completed Free Zone, so the next trip can be added only at Port Loading'
   );
 
   const pendingDubaiPreviousEntry = makePendingDubaiReturnToYardEntry();
@@ -636,6 +780,48 @@ const callCancelTruckEntry = async ({ entry, body = {}, role = 'admin' }) => {
     'Use gate-return-entry endpoint to complete Free Zone return and create next trip'
   );
   assert.strictEqual(getWorkflowState(gateCompletionEntry).workflowStatus, 'pending');
+
+  const returningFreeZoneTrip = makeFreeZoneReturnTrip();
+  const portReturnResult = await callMarkGateReturnEntry({ entry: returningFreeZoneTrip });
+
+  assert.strictEqual(portReturnResult.res.statusCode, 200);
+  assert.strictEqual(portReturnResult.res.body.completedTrip.workflowStatus, 'completed');
+  assert.strictEqual(portReturnResult.res.body.completedTrip.currentStatus, 'completed');
+  assert.strictEqual(returningFreeZoneTrip.workflowStatus, 'completed');
+  assert.strictEqual(returningFreeZoneTrip.currentStatus, 'completed');
+  assert.strictEqual(returningFreeZoneTrip.completedLocation, 'portLoading');
+  assert.strictEqual(returningFreeZoneTrip.updates.at(-2).stop, 'portLoading');
+  assert.strictEqual(returningFreeZoneTrip.updates.at(-2).status, 'entry');
+  assert.strictEqual(returningFreeZoneTrip.updates.at(-1).stop, 'portLoading');
+  assert.strictEqual(returningFreeZoneTrip.updates.at(-1).status, 'completed');
+  assert.strictEqual(portReturnResult.res.body.newTrip.originStop, 'portLoading');
+  assert.strictEqual(portReturnResult.res.body.newTrip.currentStop, 'portLoading');
+  assert.strictEqual(portReturnResult.res.body.newTrip.currentAction, 'exit');
+  assert.strictEqual(portReturnResult.res.body.newTrip.tripTime, 3);
+  assert.strictEqual(
+    portReturnResult.allEntries.filter((entry) => !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus))
+      .length,
+    1
+  );
+  assert.strictEqual(
+    portReturnResult.allEntries.find((entry) => getWorkflowState(entry).workflowStatus === 'pending').originStop,
+    'portLoading'
+  );
+
+  const thirdActiveTrip = {
+    ...makePendingDubaiReturnToYardEntry(),
+    _id: '507f1f77bcf86cd799439017',
+    headTruckNumber: returningFreeZoneTrip.headTruckNumber,
+    tailTrailerNumber: returningFreeZoneTrip.tailTrailerNumber,
+    truckId: returningFreeZoneTrip.truckId,
+  };
+  const blockedPortReturn = await callMarkGateReturnEntry({
+    entry: makeFreeZoneReturnTrip({ _id: '507f1f77bcf86cd799439018' }),
+    existingEntries: [makeFreeZoneReturnTrip({ _id: '507f1f77bcf86cd799439018' }), thirdActiveTrip],
+  });
+
+  assert.strictEqual(blockedPortReturn.res.statusCode, 409);
+  assert.strictEqual(blockedPortReturn.res.body.message, 'Duplicate active truck entry already exists');
 
   const entryTeamCancelAttemptEntry = {
     ...completedGateOrigin,
