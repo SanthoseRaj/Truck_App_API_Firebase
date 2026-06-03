@@ -80,6 +80,13 @@ const getNextRouteStop = (stop, truckEntry) =>
   getNextStopForDestination(stop, normalizeDestination(truckEntry.destination), toWorkflowOriginStop(getOriginStop(truckEntry)));
 const isCompletedFreeZoneDestination = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'freezone' && hasCompletedUpdate(truckEntry);
+const getVisibleUpdates = (truckEntry) => {
+  const destination = normalizeDestination(truckEntry.destination);
+
+  return destination === 'freezone'
+    ? truckEntry.updates.filter((update) => normalizeStop(update.stop, destination) !== 'clearence')
+    : truckEntry.updates;
+};
 
 const validateRequiredFields = (body) => {
   const missingField = requiredFields.find((field) => {
@@ -239,7 +246,7 @@ const serializeWorkflowState = (workflowState) => ({
 const serializeTruckEntry = (truckEntry) => {
   const entry = truckEntry.toObject ? truckEntry.toObject() : truckEntry;
   const destination = normalizeDestination(entry.destination);
-  const updates = entry.updates.map((update) => {
+  const updates = getVisibleUpdates(entry).map((update) => {
     const { destination: updateDestination, ...serializedUpdate } = update;
     const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
     const stop = normalizeStop(update.stop, normalizeDestination(entry.destination));

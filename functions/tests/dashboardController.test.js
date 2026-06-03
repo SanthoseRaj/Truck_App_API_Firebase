@@ -49,8 +49,8 @@ const routes = buildRouteStatsFromTruckEntries(truckEntries);
 const clearenceToDubai = routes.find(
   (route) => route.from === 'Custom Clearence' && route.to === 'Dubai'
 );
-const clearenceToFreeZone = routes.find(
-  (route) => route.from === 'Custom Clearence' && route.to === 'Free Zone'
+const portToFreeZone = routes.find(
+  (route) => route.from === 'Port Loading' && route.to === 'Free Zone'
 );
 
 assert.strictEqual(clearenceToDubai.count, 1);
@@ -60,12 +60,12 @@ assert.deepStrictEqual(
 );
 assert.strictEqual(clearenceToDubai.count, clearenceToDubai.trucks.length);
 
-assert.strictEqual(clearenceToFreeZone.count, 2);
+assert.strictEqual(portToFreeZone.count, 2);
 assert.deepStrictEqual(
-  clearenceToFreeZone.trucks.map((truck) => truck._id),
+  portToFreeZone.trucks.map((truck) => truck._id),
   ['freezone-after-clearence', 'legacy-freezone-after-clearence']
 );
-assert.strictEqual(clearenceToFreeZone.count, clearenceToFreeZone.trucks.length);
+assert.strictEqual(portToFreeZone.count, portToFreeZone.trucks.length);
 
 for (const route of routes) {
   assert.strictEqual(route.count, route.trucks.length);

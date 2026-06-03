@@ -92,6 +92,11 @@ const afterCustomClearenceExit = {
   ],
 };
 
+const freeZoneAfterPortExit = {
+  ...waitingAtCustomClearence,
+  destination: 'freezone',
+};
+
 assert.deepStrictEqual(getWorkflowState(yardOrigin), {
   currentAllowedRole: 'yard',
   currentAllowedStop: 'yard',
@@ -128,6 +133,15 @@ assert.deepStrictEqual(getWorkflowState(afterCustomClearenceExit), {
   nextStop: 'yard',
 });
 
+assert.deepStrictEqual(getWorkflowState(freeZoneAfterPortExit), {
+  currentAllowedRole: 'freezone',
+  currentAllowedStop: 'freezone',
+  currentAction: 'entry',
+  workflowStatus: 'pending',
+  nextRole: 'freezone',
+  nextStop: 'freezone',
+});
+
 assert.deepStrictEqual(getWorkflowState(completedGateOrigin), {
   currentAllowedRole: 'port',
   currentAllowedStop: 'port',
@@ -149,6 +163,7 @@ assert.deepStrictEqual(getWorkflowState(completedFreeZoneAtGate), {
 const serializedGateOrigin = serializeTruckEntry(gateOrigin);
 const serializedLegacyFreeZone = serializeTruckEntry({ ...gateOrigin, destination: 'Free Zone' });
 const serializedWaitingAtCustomClearence = serializeTruckEntry(waitingAtCustomClearence);
+const serializedFreeZoneAfterPortExit = serializeTruckEntry(freeZoneAfterPortExit);
 const serializedAfterFreeZoneCustomClearenceExit = serializeTruckEntry({
   ...afterCustomClearenceExit,
   destination: 'freezone',
@@ -163,10 +178,12 @@ assert.strictEqual(serializedGateOrigin.currentStop, 'portLoading');
 assert.strictEqual(serializedGateOrigin.currentStatus, 'entry');
 assert.strictEqual(serializedGateOrigin.currentAllowedRole, 'portLoading');
 assert.strictEqual(serializedGateOrigin.currentAction, 'exit');
-assert.strictEqual(serializedGateOrigin.nextStop, 'clearence');
+assert.strictEqual(serializedGateOrigin.nextStop, 'freezone');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAllowedRole, 'clearence');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAllowedStop, 'clearence');
 assert.strictEqual(serializedWaitingAtCustomClearence.currentAction, 'exit');
+assert.strictEqual(serializedFreeZoneAfterPortExit.currentStop, 'portLoading');
+assert.strictEqual(serializedFreeZoneAfterPortExit.nextStop, 'freezone');
 assert.strictEqual(
   serializedWaitingAtCustomClearence.updates.some(
     (update) => update.stop === 'clearence' && update.status === 'entry'
@@ -176,6 +193,10 @@ assert.strictEqual(
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedRole, 'freezone');
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAllowedStop, 'freezone');
 assert.strictEqual(serializedAfterFreeZoneCustomClearenceExit.currentAction, 'entry');
+assert.strictEqual(
+  serializedAfterFreeZoneCustomClearenceExit.updates.some((update) => update.stop === 'clearence'),
+  false
+);
 assert.strictEqual(serializedAfterFreeZoneExit.workflowStatus, 'pending');
 assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedRole, 'portLoading');
 assert.strictEqual(serializedAfterFreeZoneExit.currentAllowedStop, 'portLoading');

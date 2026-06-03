@@ -23,7 +23,7 @@ const getTerminalStop = (destination) => (destination === 'freezone' ? 'freezone
 
 const getWorkflowStopsForDestination = (destination, originStop = 'yard') => {
   const terminalStop = getTerminalStop(destination);
-  const stops = destination === 'freezone' ? [...workflowBaseStops, terminalStop] : [...workflowBaseStops];
+  const stops = destination === 'freezone' ? ['yard', 'port', terminalStop] : [...workflowBaseStops];
   const normalizedOrigin = normalizeStop(originStop) || 'yard';
   const originIndex = stops.indexOf(normalizedOrigin);
 

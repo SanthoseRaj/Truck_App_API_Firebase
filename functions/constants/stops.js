@@ -25,8 +25,8 @@ const ROUTE_MARKERS = [
 const ROUTE_LINES = [
   { from: 'Yard', to: 'Port Loading' },
   { from: 'Port Loading', to: 'Custom Clearence' },
+  { from: 'Port Loading', to: 'Free Zone' },
   { from: 'Custom Clearence', to: 'Dubai' },
-  { from: 'Custom Clearence', to: 'Free Zone' },
 ];
 
 module.exports = {

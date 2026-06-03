@@ -143,6 +143,10 @@ assert.strictEqual(
 assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAllowedRole, 'freezone');
 assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAllowedStop, 'freezone');
 assert.strictEqual(afterFreeZoneCustomClearenceExit.currentAction, 'entry');
+assert.strictEqual(
+  afterFreeZoneCustomClearenceExit.updates.some((update) => update.stop === 'clearence'),
+  false
+);
 const afterDubaiCustomClearenceExit = serializePublicTruckEntry({
   ...baseEntry,
   _id: 'entry-dubai-after-clearence',
@@ -168,7 +172,8 @@ const customClearenceExitCounts = buildDashboardCounts([
 ]);
 
 assert.strictEqual(customClearenceExitCounts.routes.clearenceToDubai, 1);
-assert.strictEqual(customClearenceExitCounts.routes.clearenceToFreezone, 1);
+assert.strictEqual(customClearenceExitCounts.routes.portToFreezone, 1);
+assert.strictEqual(customClearenceExitCounts.routes.clearenceToFreezone, 0);
 assert.strictEqual(customClearenceExitCounts.moving, 2);
 assert.strictEqual(customClearenceExitCounts.totalActive, 2);
 
@@ -187,6 +192,7 @@ assert.deepStrictEqual(counts, {
   routes: {
     yardToPortLoading: 1,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 0,
@@ -282,6 +288,7 @@ assert.deepStrictEqual(buildDashboardCounts(selectedDateEntries, { dateScoped: t
   routes: {
     yardToPortLoading: 1,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 1,
@@ -348,6 +355,7 @@ assert.deepStrictEqual(completedFreeZoneCounts, {
   routes: {
     yardToPortLoading: 0,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 0,
@@ -372,6 +380,7 @@ assert.deepStrictEqual(pendingFreeZoneToGateCounts, {
   routes: {
     yardToPortLoading: 0,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 0,
@@ -396,6 +405,7 @@ assert.deepStrictEqual(completedDubaiCounts, {
   routes: {
     yardToPortLoading: 0,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 0,
@@ -420,6 +430,7 @@ assert.deepStrictEqual(canceledCounts, {
   routes: {
     yardToPortLoading: 0,
     portToClearence: 0,
+    portToFreezone: 0,
     clearenceToDubai: 0,
     clearenceToFreezone: 0,
     dubaiToYard: 0,

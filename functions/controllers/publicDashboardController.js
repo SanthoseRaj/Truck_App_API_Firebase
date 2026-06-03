@@ -1,4 +1,5 @@
 const TruckEntry = require('../models/TruckEntry');
+const Ship = require('../models/Ship');
 const { normalizeDestination } = require('../utils/destination');
 const {
   normalizeStop,
@@ -47,12 +48,21 @@ const isFreeZoneEntryReadyForGateCompletion = (truckEntry) =>
   hasUpdate(truckEntry, 'freezone', 'exit') &&
   !hasCompletedUpdate(truckEntry);
 
+const getVisibleUpdates = (truckEntry) => {
+  const destination = normalizeDestination(truckEntry.destination);
+
+  return destination === 'freezone'
+    ? (truckEntry.updates || []).filter((update) => normalizeStop(update.stop, destination) !== 'clearence')
+    : truckEntry.updates || [];
+};
+
 const getLatestUpdate = (truckEntry, range = null) => {
-  if (!truckEntry.updates?.length) return null;
+  const visibleUpdates = getVisibleUpdates(truckEntry);
+  if (!visibleUpdates.length) return null;
 
   const updates = range
-    ? truckEntry.updates.filter((update) => isDateInRange(update.updatedAt, range))
-    : truckEntry.updates;
+    ? visibleUpdates.filter((update) => isDateInRange(update.updatedAt, range))
+    : visibleUpdates;
 
   if (!updates.length) return null;
 
@@ -205,6 +215,7 @@ const getActiveMapCount = (counts) => {
     (stops.freezone || 0) +
     (routes.yardToPortLoading || 0) +
     (routes.portToClearence || 0) +
+    (routes.portToFreezone || 0) +
     (routes.clearenceToDubai || 0) +
     (routes.clearenceToFreezone || 0) +
     (routes.dubaiToYard || 0) +
@@ -281,7 +292,7 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
           movementStatus: 'freezoneToPort',
         }
       : {}),
-    updates: (entry.updates || []).map((update) => {
+    updates: getVisibleUpdates(entry).map((update) => {
       const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
       const status = normalizeText(update.status);
 
@@ -316,6 +327,7 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
     routes: {
       yardToPortLoading: 0,
       portToClearence: 0,
+      portToFreezone: 0,
       clearenceToDubai: 0,
       clearenceToFreezone: 0,
       dubaiToYard: 0,
@@ -419,6 +431,7 @@ const getPublicDashboardTruckEntries = async (req, res, next) => {
     }
 
     const truckEntries = await TruckEntry.find(query).sort('-createdAt');
+    const ships = await Ship.find().sort('-createdAt');
     const dateRange = req.query?.date !== undefined ? getDashboardDateRange(req.query.date) : null;
     const filteredTruckEntries =
       req.query?.date !== undefined ? filterDashboardTruckEntriesByDate(truckEntries, req.query.date) : truckEntries;
@@ -435,6 +448,7 @@ const getPublicDashboardTruckEntries = async (req, res, next) => {
 
     return res.status(200).json({
       counts,
+      shipNames: ships.map((ship) => ship.shipName),
       truckEntries: publicTruckEntries,
     });
   } catch (error) {
