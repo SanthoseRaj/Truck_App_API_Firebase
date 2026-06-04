@@ -1,5 +1,6 @@
 const assert = require('assert');
 const Truck = require('../models/Truck');
+const Supplier = require('../models/Supplier');
 const {
   createTruck,
   updateTruck,
@@ -29,9 +30,10 @@ const makeCreateBody = (truckModel) => ({
   truckModel,
 });
 
-const callCreateTruck = async (truckModel) => {
+const callCreateTruck = async (truckModel, bodyOverrides = {}, supplier = null) => {
   const originalFindOne = Truck.findOne;
   const originalCreate = Truck.create;
+  const originalSupplierFindById = Supplier.findById;
   const res = makeRes();
   let createdPayload = null;
   let nextError = null;
@@ -41,10 +43,11 @@ const callCreateTruck = async (truckModel) => {
     createdPayload = payload;
     return { _id: validTruckId, ...payload };
   };
+  Supplier.findById = async () => supplier;
 
   try {
     await createTruck(
-      { body: makeCreateBody(truckModel), user: { _id: validUserId } },
+      { body: { ...makeCreateBody(truckModel), ...bodyOverrides }, user: { _id: validUserId } },
       res,
       (error) => {
         nextError = error;
@@ -53,14 +56,16 @@ const callCreateTruck = async (truckModel) => {
   } finally {
     Truck.findOne = originalFindOne;
     Truck.create = originalCreate;
+    Supplier.findById = originalSupplierFindById;
   }
 
   assert.strictEqual(nextError, null);
   return { res, createdPayload };
 };
 
-const callUpdateTruck = async (truckModel) => {
+const callUpdateTruck = async (truckModel, bodyOverrides = {}, supplier = null) => {
   const originalFindByIdAndUpdate = Truck.findByIdAndUpdate;
+  const originalSupplierFindById = Supplier.findById;
   const res = makeRes();
   let updatePayload = null;
   let nextError = null;
@@ -74,10 +79,11 @@ const callUpdateTruck = async (truckModel) => {
       ...updates,
     };
   };
+  Supplier.findById = async () => supplier;
 
   try {
     await updateTruck(
-      { params: { id: validTruckId }, body: { truckModel } },
+      { params: { id: validTruckId }, body: { truckModel, ...bodyOverrides } },
       res,
       (error) => {
         nextError = error;
@@ -85,6 +91,7 @@ const callUpdateTruck = async (truckModel) => {
     );
   } finally {
     Truck.findByIdAndUpdate = originalFindByIdAndUpdate;
+    Supplier.findById = originalSupplierFindById;
   }
 
   assert.strictEqual(nextError, null);
@@ -118,6 +125,38 @@ const callUpdateTruck = async (truckModel) => {
   assert.strictEqual(serializeTruck({ _id: validTruckId, truckModel: 'threeAxis' }).truckModel, '2 Axle');
   assert.strictEqual(serializeTruck({ _id: validTruckId, truckModel: 'fourAxis' }).truckModel, '3 Axle');
   assert.strictEqual(serializeTruck({ _id: validTruckId, truckModel: 'sixAxis' }).truckModel, '6 Wheel');
+  assert.strictEqual(serializeTruck({ _id: validTruckId, truckModel: 'sixAxis' }).supplierId, null);
+  assert.strictEqual(serializeTruck({ _id: validTruckId, truckModel: 'sixAxis' }).supplierName, '');
+
+  const supplierId = '507f1f77bcf86cd799439012';
+  const supplier = { _id: supplierId, supplierName: 'Gulf Supplier' };
+  const createdWithSupplier = await callCreateTruck(
+    'sixAxis',
+    { supplierId, supplierName: 'Ignored Supplier Name', isActive: false },
+    supplier
+  );
+  assert.strictEqual(createdWithSupplier.createdPayload.supplierId, supplierId);
+  assert.strictEqual(createdWithSupplier.createdPayload.supplierName, 'Gulf Supplier');
+  assert.strictEqual(createdWithSupplier.createdPayload.isActive, false);
+  assert.strictEqual(createdWithSupplier.res.body.truck.supplierName, 'Gulf Supplier');
+
+  const updatedWithSupplier = await callUpdateTruck(
+    'threeAxis',
+    { supplierId, supplierName: 'Ignored Supplier Name' },
+    supplier
+  );
+  assert.strictEqual(updatedWithSupplier.updatePayload.supplierId, supplierId);
+  assert.strictEqual(updatedWithSupplier.updatePayload.supplierName, 'Gulf Supplier');
+  assert.strictEqual(updatedWithSupplier.res.body.truck.supplierName, 'Gulf Supplier');
+
+  const clearedSupplier = await callUpdateTruck('threeAxis', { supplierId: null, supplierName: 'Ignored' });
+  assert.strictEqual(clearedSupplier.updatePayload.supplierId, null);
+  assert.strictEqual(clearedSupplier.updatePayload.supplierName, '');
+
+  const missingSupplier = await callCreateTruck('sixAxis', { supplierId }, null);
+  assert.strictEqual(missingSupplier.res.statusCode, 404);
+  assert.strictEqual(missingSupplier.res.body.message, 'Supplier not found');
+  assert.strictEqual(missingSupplier.createdPayload, null);
 
   assert.strictEqual(
     validateTruckInput(makeCreateBody('fiveAxis'), { requireAll: true }),

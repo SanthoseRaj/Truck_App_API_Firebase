@@ -1,17 +1,21 @@
 const mongoose = require('mongoose');
 const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
+const Supplier = require('../models/Supplier');
 const { normalizeTruckModel } = require('../utils/truckModel');
 
 const TRUCK_MODEL_ERROR = 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel';
 
 const normalizeUpper = (value) => (value || '').trim().toUpperCase();
+const trimString = (value) => (typeof value === 'string' ? value.trim() : value);
 
 const serializeTruck = (truck) => ({
   id: truck._id,
   headTruckNumber: truck.headTruckNumber,
   tailTrailerNumber: truck.tailTrailerNumber,
   truckModel: normalizeTruckModel(truck.truckModel) || truck.truckModel,
+  supplierId: truck.supplierId || null,
+  supplierName: truck.supplierName || '',
   isActive: truck.isActive !== false,
   createdAt: truck.createdAt,
   updatedAt: truck.updatedAt,
@@ -39,6 +43,37 @@ const validateTruckInput = (body, options = {}) => {
   }
 
   return null;
+};
+
+const hasSupplierIdValue = (body = {}) =>
+  body.supplierId !== undefined && body.supplierId !== null && String(body.supplierId).trim();
+
+const resolveTruckSupplierAssignment = async (body = {}) => {
+  if (hasSupplierIdValue(body)) {
+    if (!mongoose.isValidObjectId(body.supplierId)) {
+      return { error: { status: 404, message: 'Supplier not found' } };
+    }
+
+    const supplier = await Supplier.findById(body.supplierId);
+    if (!supplier) return { error: { status: 404, message: 'Supplier not found' } };
+
+    return {
+      assignment: {
+        supplierId: supplier._id,
+        supplierName: supplier.supplierName,
+      },
+    };
+  }
+
+  if ('supplierId' in body) {
+    return { assignment: { supplierId: null, supplierName: '' } };
+  }
+
+  if ('supplierName' in body) {
+    return { assignment: { supplierName: trimString(body.supplierName) || '' } };
+  }
+
+  return { assignment: null };
 };
 
 const handleDuplicateHeadTruckNumber = (error, res) => {
@@ -72,10 +107,18 @@ const createTruck = async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'Head truck number already exists' });
     }
 
+    const supplierResult = await resolveTruckSupplierAssignment(req.body);
+    if (supplierResult.error) {
+      return res
+        .status(supplierResult.error.status)
+        .json({ success: false, message: supplierResult.error.message });
+    }
+
     const truck = await Truck.create({
       headTruckNumber,
       tailTrailerNumber: normalizeUpper(req.body.tailTrailerNumber),
       truckModel: normalizeTruckModel(req.body.truckModel),
+      ...(supplierResult.assignment || {}),
       isActive: typeof req.body.isActive === 'boolean' ? req.body.isActive : true,
       createdBy: req.user._id,
     });
@@ -132,6 +175,15 @@ const updateTruck = async (req, res, next) => {
       updates.tailTrailerNumber = normalizeUpper(req.body.tailTrailerNumber);
     }
     if ('truckModel' in req.body) updates.truckModel = normalizeTruckModel(req.body.truckModel);
+    if ('supplierId' in req.body || 'supplierName' in req.body) {
+      const supplierResult = await resolveTruckSupplierAssignment(req.body);
+      if (supplierResult.error) {
+        return res
+          .status(supplierResult.error.status)
+          .json({ success: false, message: supplierResult.error.message });
+      }
+      Object.assign(updates, supplierResult.assignment || {});
+    }
     if ('isActive' in req.body) updates.isActive = req.body.isActive;
 
     const truck = await Truck.findByIdAndUpdate(req.params.id, updates, {

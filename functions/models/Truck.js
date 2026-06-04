@@ -24,6 +24,16 @@ const truckSchema = new mongoose.Schema(
         message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel',
       },
     },
+    supplierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supplier',
+      default: null,
+    },
+    supplierName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     isActive: {
       type: Boolean,
       default: true,
