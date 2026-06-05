@@ -26,9 +26,18 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.set('etag', false);
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
+
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
 
 app.get('/', (req, res) => {
   res.json({
