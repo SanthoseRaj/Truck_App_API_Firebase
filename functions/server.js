@@ -7,11 +7,11 @@ const swaggerUi = require('swagger-ui-express');
 
 const connectDB = require('./config/db');
 const swaggerSpec = require('./config/swagger');
-const ensureTruckIndexes = require('./utils/ensureTruckIndexes');
-const ensureShipIndexes = require('./utils/ensureShipIndexes');
-const ensureDriverIndexes = require('./utils/ensureDriverIndexes');
-const ensureSupplierIndexes = require('./utils/ensureSupplierIndexes');
-const seedUsers = require('./utils/seedUsers');
+// const ensureTruckIndexes = require('./utils/ensureTruckIndexes');
+// const ensureShipIndexes = require('./utils/ensureShipIndexes');
+// const ensureDriverIndexes = require('./utils/ensureDriverIndexes');
+// const ensureSupplierIndexes = require('./utils/ensureSupplierIndexes');
+// const seedUsers = require('./utils/seedUsers');
 const authRoutes = require('./routes/authRoutes');
 const truckRoutes = require('./routes/truckRoutes');
 const shipRoutes = require('./routes/shipRoutes');
@@ -38,6 +38,18 @@ app.use('/api', (req, res, next) => {
   res.set('Surrogate-Control', 'no-store');
   next();
 });
+
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+
 
 app.get('/', (req, res) => {
   res.json({
@@ -120,17 +132,17 @@ app.use(errorHandler);
 // startServer();
 
 
-connectDB()
-  .then(async () => {
-    await ensureTruckIndexes();
-    await ensureShipIndexes();
-    await ensureDriverIndexes();
-    await ensureSupplierIndexes();
-    await seedUsers();
-    console.log('Firebase Function database connected');
-  })
-  .catch((error) => {
-    console.error(`Database connection failed: ${error.message}`);
-  });
+// connectDB()
+//   .then(async () => {
+//     await ensureTruckIndexes();
+//     await ensureShipIndexes();
+//     await ensureDriverIndexes();
+//     await ensureSupplierIndexes();
+//     await seedUsers();
+//     console.log('Firebase Function database connected');
+//   })
+//   .catch((error) => {
+//     console.error(`Database connection failed: ${error.message}`);
+//   });
 
 module.exports = app;

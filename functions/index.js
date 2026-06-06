@@ -40,6 +40,8 @@ exports.api = onRequest(
   {
     region: "us-central1",
     maxInstances: 10,
+    timeoutSeconds: 60,
+    memory: "512MiB",
   },
   app
 );
