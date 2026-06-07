@@ -133,14 +133,15 @@ const hasUpdate = (truckEntry, stop, status) =>
   );
 
 const hasCompletedUpdate = (truckEntry) =>
-  truckEntry.updates.some((update) => normalizeText(update.status) === 'completed');
+  (truckEntry?.updates || []).some((update) => normalizeText(update.status) === 'completed');
 
 const hasCanceledUpdate = (truckEntry) =>
-  (truckEntry.updates || []).some((update) => normalizeText(update.status) === 'canceled');
+  (truckEntry?.updates || []).some((update) => ['canceled', 'cancelled'].includes(normalizeText(update.status)));
 
 const isCanceledTruckEntry = (truckEntry) =>
-  normalizeText(truckEntry?.workflowStatus) === 'canceled' ||
-  normalizeText(truckEntry?.currentStatus) === 'canceled' ||
+  ['canceled', 'cancelled'].includes(normalizeText(truckEntry?.workflowStatus)) ||
+  ['canceled', 'cancelled'].includes(normalizeText(truckEntry?.currentStatus)) ||
+  truckEntry?.canceledAt != null ||
   hasCanceledUpdate(truckEntry);
 
 const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
@@ -312,11 +313,22 @@ const serializeTruckEntry = (truckEntry) => {
   };
 };
 
-const getEntriesForTruck = (headTruckNumber, tailTrailerNumber) =>
-  TruckEntry.find({
-    headTruckNumber,
-    tailTrailerNumber,
-  }).sort('-createdAt');
+const buildTruckEntryLookupQuery = (truckId, headTruckNumber, tailTrailerNumber) => {
+  const truckMatches = [];
+
+  if (truckId) {
+    truckMatches.push({ truckId });
+  }
+
+  if (headTruckNumber && tailTrailerNumber) {
+    truckMatches.push({ headTruckNumber, tailTrailerNumber });
+  }
+
+  return truckMatches.length === 1 ? truckMatches[0] : { $or: truckMatches };
+};
+
+const getEntriesForTruck = (truckId, headTruckNumber, tailTrailerNumber) =>
+  TruckEntry.find(buildTruckEntryLookupQuery(truckId, headTruckNumber, tailTrailerNumber)).sort('-createdAt');
 
 const getAllowedDubaiYardCompletionEntry = (entries, originStop) => {
   if (originStop !== 'yard') return null;
@@ -330,10 +342,51 @@ const hasOpenTruckEntry = (entries, allowedOpenEntry = null) =>
       entry !== allowedOpenEntry &&
       !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus)
   );
-const getLatestCompletedEntry = (entries, effectiveCompletedEntry = null) =>
-  entries.find(
-    (entry) => entry === effectiveCompletedEntry || getWorkflowState(entry).workflowStatus === 'completed'
-  ) || null;
+
+const toTimeValue = (value) => {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const getLatestActivityTime = (entry) =>
+  Math.max(
+    toTimeValue(entry?.updatedAt),
+    toTimeValue(entry?.createdAt),
+    toTimeValue(entry?.completedAt),
+    toTimeValue(entry?.canceledAt),
+    ...(entry?.updates || []).map((update) => toTimeValue(update.updatedAt))
+  );
+
+const sortEntriesByLatestActivity = (entries) =>
+  [...entries].sort((first, second) => getLatestActivityTime(second) - getLatestActivityTime(first));
+
+const getLatestCompletedEntry = (entries, effectiveCompletedEntry = null) => {
+  const sortedEntries = sortEntriesByLatestActivity(entries);
+  const latestEntry = sortedEntries[0] || null;
+
+  if (latestEntry && isCanceledTruckEntry(latestEntry)) return null;
+
+  return (
+    sortedEntries.find(
+      (entry) =>
+        (entry === effectiveCompletedEntry || getWorkflowState(entry).workflowStatus === 'completed') &&
+        !isCanceledTruckEntry(entry)
+    ) || null
+  );
+};
+
+const getTripCountValue = (entry) => {
+  const tripTime = Number(entry?.tripTime);
+  if (Number.isFinite(tripTime) && tripTime > 0) return tripTime;
+
+  const tripNumber = Number(entry?.tripNumber);
+  return Number.isFinite(tripNumber) && tripNumber > 0 ? tripNumber : 0;
+};
+
+const getNextTripCount = (entries) =>
+  entries.reduce((max, entry) => Math.max(max, getTripCountValue(entry)), 0) + 1;
 
 const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updatedAt) => {
   const previousEntry = getAllowedDubaiYardCompletionEntry(entries, originStop);
@@ -452,11 +505,6 @@ const buildTruckEntryPayload = (body, truck, ship, supplier, originStop, entryAt
     },
   ],
 });
-
-const getNextTripTime = (existingTrip, fallbackTripTime) => {
-  const currentTripTime = Number(existingTrip?.tripTime);
-  return Number.isFinite(currentTripTime) ? currentTripTime + 1 : Number(fallbackTripTime);
-};
 
 const getEntryId = (entry) => (entry?._id === undefined || entry?._id === null ? entry?.id : entry._id);
 const isSameTruckEntry = (entry, otherEntryOrId) => {
@@ -611,7 +659,10 @@ const createTruckEntry = async (req, res, next) => {
     }
 
     const originStop = originStopUpdate.originStop;
-    const existingEntries = await getEntriesForTruck(headTruckNumber, tailTrailerNumber);
+    const existingEntries = sortEntriesByLatestActivity(
+      await getEntriesForTruck(truck._id, headTruckNumber, tailTrailerNumber)
+    );
+    const nextTripCount = getNextTripCount(existingEntries);
     const entryAt = body.entryAt ? parseSelectedLocalDateTime(body.entryAt) : selectedLocalDateTimeFromDate(new Date());
 
     if (!entryAt) {
@@ -641,8 +692,8 @@ const createTruckEntry = async (req, res, next) => {
       shipId: ship._id,
       shipName: body.shipName.trim(),
       shipNumber: normalizeUpper(body.shipNumber),
-      tripNumber: body.tripNumber.trim(),
-      tripTime: Number(body.tripTime),
+      tripNumber: String(nextTripCount),
+      tripTime: nextTripCount,
       driverName: body.driverName.trim(),
       driverMobile: body.driverMobile.trim(),
       driverTdCardNumber: body.driverTdCardNumber.trim(),
@@ -848,12 +899,16 @@ const markGateReturnEntry = async (req, res, next) => {
       }
 
       const existingEntries = await resolveQueryWithSession(
-        TruckEntry.find({
-          headTruckNumber: normalizeUpper(truckEntry.headTruckNumber),
-          tailTrailerNumber: normalizeUpper(truckEntry.tailTrailerNumber),
-        }).sort('-createdAt'),
+        TruckEntry.find(
+          buildTruckEntryLookupQuery(
+            truckEntry.truckId,
+            normalizeUpper(truckEntry.headTruckNumber),
+            normalizeUpper(truckEntry.tailTrailerNumber)
+          )
+        ).sort('-createdAt'),
         session
       );
+      const nextTripCount = getNextTripCount(existingEntries);
       const duplicateOpenEntry = existingEntries.some(
         (entry) =>
           !isSameTruckEntry(entry, truckEntry) &&
@@ -870,7 +925,8 @@ const markGateReturnEntry = async (req, res, next) => {
       const nextTripPayload = buildTruckEntryPayload(
         {
           ...nextTrip,
-          tripTime: getNextTripTime(truckEntry, nextTrip.tripTime),
+          tripNumber: String(nextTripCount),
+          tripTime: nextTripCount,
           entryAt: nextTrip.entryAt || entryAt,
         },
         nextTripValidation.truck,

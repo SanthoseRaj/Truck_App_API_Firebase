@@ -362,7 +362,35 @@ const makePendingDubaiReturnToYardEntry = () => ({
   ],
 });
 
-const callCreateTruckEntry = async ({ body, entries = [], createImpl = null, expectNextError = false }) => {
+const makeCanceledEntry = (overrides = {}) => ({
+  ...makePendingDubaiReturnToYardEntry(),
+  _id: 'canceled-latest-entry',
+  workflowStatus: 'cancelled',
+  currentStatus: 'cancelled',
+  canceledAt: at(12),
+  createdAt: at(10),
+  updatedAt: at(12),
+  updates: [
+    ...makePendingDubaiReturnToYardEntry().updates,
+    { stop: 'clearence', status: 'cancelled', updatedAt: at(12) },
+  ],
+  ...overrides,
+});
+
+const matchesTruckEntryCriteria = (entry, criteria) => {
+  if (!criteria) return true;
+  if (criteria.$or) return criteria.$or.some((candidate) => matchesTruckEntryCriteria(entry, candidate));
+
+  return Object.entries(criteria).every(([key, value]) => String(entry[key]) === String(value));
+};
+
+const callCreateTruckEntry = async ({
+  body,
+  entries = [],
+  createImpl = null,
+  expectNextError = false,
+  expectFindCriteria = null,
+}) => {
   const originalFindById = Ship.findById;
   const originalTruckFindOne = Truck.findOne;
   const originalSupplierFindOne = Supplier.findOne;
@@ -395,7 +423,13 @@ const callCreateTruckEntry = async ({ body, entries = [], createImpl = null, exp
     supplierName: body.supplierId ? 'Supplier By Id' : body.supplierName.trim(),
     isActive: true,
   });
-  TruckEntry.find = () => ({ sort: async () => entries });
+  TruckEntry.find = (criteria) => {
+    if (expectFindCriteria) {
+      assert.deepStrictEqual(criteria, expectFindCriteria);
+    }
+
+    return { sort: async () => entries };
+  };
   TruckEntry.create =
     createImpl || (async (payload) => ({ _id: 'created-entry', ...payload }));
 
@@ -565,11 +599,7 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
 
     return {
       sort: async () =>
-        allEntries.filter(
-          (candidate) =>
-            candidate.headTruckNumber === criteria.headTruckNumber &&
-            candidate.tailTrailerNumber === criteria.tailTrailerNumber
-        ),
+        allEntries.filter((candidate) => matchesTruckEntryCriteria(candidate, criteria)),
     };
   };
   TruckEntry.create = async (payloads) => {
@@ -646,11 +676,19 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
 (async () => {
   const yardFreezone = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
+    expectFindCriteria: {
+      $or: [
+        { truckId: validTruckId },
+        { headTruckNumber: 'HT-200', tailTrailerNumber: 'TT-200' },
+      ],
+    },
   });
 
   assert.strictEqual(yardFreezone.statusCode, 201);
   assert.strictEqual(yardFreezone.body.truckEntry.destination, 'freezone');
   assert.strictEqual(yardFreezone.body.truckEntry.originStop, 'yard');
+  assert.strictEqual(yardFreezone.body.truckEntry.tripNumber, '1');
+  assert.strictEqual(yardFreezone.body.truckEntry.tripTime, 1);
   assert.strictEqual(yardFreezone.body.truckEntry.supplierName, 'Gulf Supplier');
   assert.strictEqual(String(yardFreezone.body.truckEntry.supplierId), '507f1f77bcf86cd799439012');
 
@@ -673,6 +711,39 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
   assert.strictEqual(supplierById.body.truckEntry.supplierName, 'Supplier By Id');
   assert.strictEqual(String(supplierById.body.truckEntry.supplierId), '507f1f77bcf86cd799439013');
 
+  const completedTripCountHistory = {
+    ...makeCompletedEntry('dubai'),
+    truckId: validTruckId,
+    headTruckNumber: 'HT-200',
+    tailTrailerNumber: 'TT-200',
+    tripNumber: '11',
+    tripTime: 11,
+  };
+  const afterCompletedTripCountHistory = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard', tripNumber: '1', tripTime: 1 }),
+    entries: [completedTripCountHistory],
+  });
+
+  assert.strictEqual(afterCompletedTripCountHistory.statusCode, 201);
+  assert.strictEqual(afterCompletedTripCountHistory.body.truckEntry.tripNumber, '12');
+  assert.strictEqual(afterCompletedTripCountHistory.body.truckEntry.tripTime, 12);
+
+  const canceledTripCountHistory = makeCanceledEntry({
+    truckId: validTruckId,
+    headTruckNumber: 'HT-200',
+    tailTrailerNumber: 'TT-200',
+    tripNumber: '11',
+    tripTime: 11,
+  });
+  const afterCanceledTripCountHistory = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard', tripNumber: '1', tripTime: 1 }),
+    entries: [canceledTripCountHistory],
+  });
+
+  assert.strictEqual(afterCanceledTripCountHistory.statusCode, 201);
+  assert.strictEqual(afterCanceledTripCountHistory.body.truckEntry.tripNumber, '12');
+  assert.strictEqual(afterCanceledTripCountHistory.body.truckEntry.tripTime, 12);
+
   const previousDubaiGateOrigin = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'gate' }),
     entries: [makeCompletedEntry('dubai')],
@@ -694,6 +765,22 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
     previousFreezoneYardOrigin.body.message,
     'This truck completed Free Zone, so the next trip can be added only at Port Loading'
   );
+
+  const afterLatestCanceledFreezoneYardOrigin = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [makeCompletedEntry('freezone'), makeCanceledEntry()],
+  });
+
+  assert.strictEqual(afterLatestCanceledFreezoneYardOrigin.statusCode, 201);
+  assert.strictEqual(afterLatestCanceledFreezoneYardOrigin.body.truckEntry.originStop, 'yard');
+
+  const afterLatestCanceledDubaiPortOrigin = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'freezone', originStop: 'gate' }),
+    entries: [makeCompletedEntry('dubai'), makeCanceledEntry()],
+  });
+
+  assert.strictEqual(afterLatestCanceledDubaiPortOrigin.statusCode, 201);
+  assert.strictEqual(afterLatestCanceledDubaiPortOrigin.body.truckEntry.originStop, 'portLoading');
 
   const pendingDubaiPreviousEntry = makePendingDubaiReturnToYardEntry();
   const completionEvents = [];
@@ -785,6 +872,18 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
 
   assert.strictEqual(afterCanceledPreviousEntry.statusCode, 201);
 
+  const canceledAtOnlyPreviousEntry = {
+    ...makePendingDubaiReturnToYardEntry(),
+    _id: 'canceled-at-only-entry',
+    canceledAt: at(8),
+  };
+  const afterCanceledAtOnlyPreviousEntry = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [canceledAtOnlyPreviousEntry],
+  });
+
+  assert.strictEqual(afterCanceledAtOnlyPreviousEntry.statusCode, 201);
+
   const gateCompletionEntry = {
     ...completedGateOrigin,
     save: async () => {},
@@ -818,6 +917,7 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
   assert.strictEqual(portReturnResult.res.body.newTrip.originStop, 'portLoading');
   assert.strictEqual(portReturnResult.res.body.newTrip.currentStop, 'portLoading');
   assert.strictEqual(portReturnResult.res.body.newTrip.currentAction, 'exit');
+  assert.strictEqual(portReturnResult.res.body.newTrip.tripNumber, '3');
   assert.strictEqual(portReturnResult.res.body.newTrip.tripTime, 3);
   assert.strictEqual(
     portReturnResult.allEntries.filter((entry) => !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus))
