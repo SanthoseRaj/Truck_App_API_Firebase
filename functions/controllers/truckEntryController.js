@@ -144,10 +144,32 @@ const isCanceledTruckEntry = (truckEntry) =>
   truckEntry?.canceledAt != null ||
   hasCanceledUpdate(truckEntry);
 
-const isDubaiEntryReadyForYardCompletion = (truckEntry) =>
-  normalizeDestination(truckEntry?.destination) === 'dubai' &&
-  hasUpdate(truckEntry, 'clearence', 'exit') &&
-  !hasCompletedUpdate(truckEntry);
+const getLatestUpdate = (truckEntry) =>
+  (truckEntry?.updates || []).reduce((latestUpdate, update) => {
+    if (!latestUpdate) return update;
+    return toTimeValue(update.updatedAt) >= toTimeValue(latestUpdate.updatedAt) ? update : latestUpdate;
+  }, null);
+
+const hasDubaiMovementUpdate = (truckEntry) =>
+  (truckEntry?.updates || []).some((update) => {
+    const stop = normalizeStop(update.stop, normalizeDestination(truckEntry?.destination));
+    const status = normalizeText(update.status);
+
+    return stop === 'dubai' && ['entry', 'exit'].includes(status);
+  });
+
+const isDubaiEntryReadyForYardCompletion = (truckEntry) => {
+  const latestUpdate = getLatestUpdate(truckEntry);
+
+  return (
+    normalizeDestination(truckEntry?.destination) === 'dubai' &&
+    !isCanceledTruckEntry(truckEntry) &&
+    !hasCompletedUpdate(truckEntry) &&
+    !hasDubaiMovementUpdate(truckEntry) &&
+    normalizeStop(latestUpdate?.stop, 'dubai') === 'clearence' &&
+    normalizeText(latestUpdate?.status) === 'exit'
+  );
+};
 
 const isFreeZoneEntryReadyForGateCompletion = (truckEntry) =>
   normalizeDestination(truckEntry?.destination) === 'freezone' &&
@@ -327,21 +349,34 @@ const buildTruckEntryLookupQuery = (truckId, headTruckNumber, tailTrailerNumber)
   return truckMatches.length === 1 ? truckMatches[0] : { $or: truckMatches };
 };
 
-const getEntriesForTruck = (truckId, headTruckNumber, tailTrailerNumber) =>
-  TruckEntry.find(buildTruckEntryLookupQuery(truckId, headTruckNumber, tailTrailerNumber)).sort('-createdAt');
+const getEntriesForTruck = async (truckId, headTruckNumber, tailTrailerNumber) => {
+  if (truckId) {
+    const truckIdEntries = await TruckEntry.find({ truckId }).sort('-createdAt');
+    if (truckIdEntries.length > 0) return truckIdEntries;
+  }
 
-const getAllowedDubaiYardCompletionEntry = (entries, originStop) => {
-  if (originStop !== 'yard') return null;
+  if (headTruckNumber && tailTrailerNumber) {
+    return TruckEntry.find({ headTruckNumber, tailTrailerNumber }).sort('-createdAt');
+  }
 
-  return entries.find(isDubaiEntryReadyForYardCompletion) || null;
+  return [];
 };
 
-const hasOpenTruckEntry = (entries, allowedOpenEntry = null) =>
-  entries.some(
+const getAllowedDubaiYardCompletionEntries = (entries, originStop) => {
+  if (originStop !== 'yard') return [];
+
+  return entries.filter(isDubaiEntryReadyForYardCompletion);
+};
+
+const hasOpenTruckEntry = (entries, allowedOpenEntries = []) => {
+  const allowedOpenEntrySet = new Set(allowedOpenEntries);
+
+  return entries.some(
     (entry) =>
-      entry !== allowedOpenEntry &&
+      !allowedOpenEntrySet.has(entry) &&
       !['completed', 'canceled'].includes(getWorkflowState(entry).workflowStatus)
   );
+};
 
 const toTimeValue = (value) => {
   if (!value) return 0;
@@ -362,16 +397,17 @@ const getLatestActivityTime = (entry) =>
 const sortEntriesByLatestActivity = (entries) =>
   [...entries].sort((first, second) => getLatestActivityTime(second) - getLatestActivityTime(first));
 
-const getLatestCompletedEntry = (entries, effectiveCompletedEntry = null) => {
+const getLatestCompletedEntry = (entries, effectiveCompletedEntries = []) => {
   const sortedEntries = sortEntriesByLatestActivity(entries);
   const latestEntry = sortedEntries[0] || null;
+  const effectiveCompletedEntrySet = new Set(effectiveCompletedEntries);
 
   if (latestEntry && isCanceledTruckEntry(latestEntry)) return null;
 
   return (
     sortedEntries.find(
       (entry) =>
-        (entry === effectiveCompletedEntry || getWorkflowState(entry).workflowStatus === 'completed') &&
+        (effectiveCompletedEntrySet.has(entry) || getWorkflowState(entry).workflowStatus === 'completed') &&
         !isCanceledTruckEntry(entry)
     ) || null
   );
@@ -389,24 +425,26 @@ const getNextTripCount = (entries) =>
   entries.reduce((max, entry) => Math.max(max, getTripCountValue(entry)), 0) + 1;
 
 const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updatedAt) => {
-  const previousEntry = getAllowedDubaiYardCompletionEntry(entries, originStop);
-  if (!previousEntry) return null;
+  const previousEntries = getAllowedDubaiYardCompletionEntries(entries, originStop);
+  if (previousEntries.length === 0) return null;
 
-  previousEntry.updates.push({
-    stop: 'dubai',
-    status: 'completed',
-    destination: 'dubai',
-    updatedAt,
-    teamName: getTeamName(user),
-    memberName: user.name,
-    remarks: 'Dubai destination trip completed when truck was reassigned from Yard',
-  });
+  for (const previousEntry of previousEntries) {
+    previousEntry.updates.push({
+      stop: 'dubai',
+      status: 'completed',
+      destination: 'dubai',
+      updatedAt,
+      teamName: getTeamName(user),
+      memberName: user.name,
+      remarks: 'Dubai destination trip completed when truck was reassigned from Yard',
+    });
 
-  if (typeof previousEntry.save === 'function') {
-    await previousEntry.save();
+    if (typeof previousEntry.save === 'function') {
+      await previousEntry.save();
+    }
   }
 
-  return previousEntry;
+  return previousEntries[0];
 };
 
 const completeFreeZoneEntryAtPortLoading = (truckEntry, user, updatedAt, remarks = undefined) => {
@@ -669,15 +707,15 @@ const createTruckEntry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'entryAt must be a valid date' });
     }
 
-    const dubaiYardCompletionEntry = getAllowedDubaiYardCompletionEntry(existingEntries, originStop);
+    const dubaiYardCompletionEntries = getAllowedDubaiYardCompletionEntries(existingEntries, originStop);
 
-    const duplicateOpenEntry = hasOpenTruckEntry(existingEntries, dubaiYardCompletionEntry);
+    const duplicateOpenEntry = hasOpenTruckEntry(existingEntries, dubaiYardCompletionEntries);
 
     if (duplicateOpenEntry) {
       return res.status(409).json({ success: false, message: 'Duplicate active truck entry already exists' });
     }
 
-    const originCycleError = validateOriginCycle(originStop, getLatestCompletedEntry(existingEntries, dubaiYardCompletionEntry));
+    const originCycleError = validateOriginCycle(originStop, getLatestCompletedEntry(existingEntries, dubaiYardCompletionEntries));
 
     if (originCycleError) {
       return res.status(400).json({ success: false, message: originCycleError });

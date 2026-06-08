@@ -387,6 +387,7 @@ const matchesTruckEntryCriteria = (entry, criteria) => {
 const callCreateTruckEntry = async ({
   body,
   entries = [],
+  entriesByFind = null,
   createImpl = null,
   expectNextError = false,
   expectFindCriteria = null,
@@ -423,12 +424,19 @@ const callCreateTruckEntry = async ({
     supplierName: body.supplierId ? 'Supplier By Id' : body.supplierName.trim(),
     isActive: true,
   });
+  let findCallIndex = 0;
   TruckEntry.find = (criteria) => {
     if (expectFindCriteria) {
-      assert.deepStrictEqual(criteria, expectFindCriteria);
+      const expectedCriteria = Array.isArray(expectFindCriteria)
+        ? expectFindCriteria[findCallIndex]
+        : expectFindCriteria;
+      assert.deepStrictEqual(criteria, expectedCriteria);
     }
 
-    return { sort: async () => entries };
+    const resultEntries = entriesByFind ? entriesByFind[findCallIndex] || [] : entries;
+    findCallIndex += 1;
+
+    return { sort: async () => resultEntries };
   };
   TruckEntry.create =
     createImpl || (async (payload) => ({ _id: 'created-entry', ...payload }));
@@ -676,12 +684,10 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
 (async () => {
   const yardFreezone = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'freezone', originStop: 'yard' }),
-    expectFindCriteria: {
-      $or: [
-        { truckId: validTruckId },
-        { headTruckNumber: 'HT-200', tailTrailerNumber: 'TT-200' },
-      ],
-    },
+    expectFindCriteria: [
+      { truckId: validTruckId },
+      { headTruckNumber: 'HT-200', tailTrailerNumber: 'TT-200' },
+    ],
   });
 
   assert.strictEqual(yardFreezone.statusCode, 201);
@@ -691,6 +697,21 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
   assert.strictEqual(yardFreezone.body.truckEntry.tripTime, 1);
   assert.strictEqual(yardFreezone.body.truckEntry.supplierName, 'Gulf Supplier');
   assert.strictEqual(String(yardFreezone.body.truckEntry.supplierId), '507f1f77bcf86cd799439012');
+
+  const truckNumberFallbackEntry = makeCompletedEntry('dubai');
+  truckNumberFallbackEntry.tripTime = 6;
+  truckNumberFallbackEntry.tripNumber = '6';
+  const fallbackLookup = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entriesByFind: [[], [truckNumberFallbackEntry]],
+    expectFindCriteria: [
+      { truckId: validTruckId },
+      { headTruckNumber: 'HT-200', tailTrailerNumber: 'TT-200' },
+    ],
+  });
+
+  assert.strictEqual(fallbackLookup.statusCode, 201);
+  assert.strictEqual(fallbackLookup.body.truckEntry.tripNumber, '7');
 
   const gateDubai = await callCreateTruckEntry({
     body: makeCreateBody({ destination: 'dubai', originStop: 'gate' }),
@@ -814,6 +835,66 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
     true
   );
   assert.strictEqual(getWorkflowState(pendingDubaiPreviousEntry).workflowStatus, 'completed');
+
+  const firstEligibleLegacyDubaiEntry = makePendingDubaiReturnToYardEntry();
+  const secondEligibleLegacyDubaiEntry = {
+    ...makePendingDubaiReturnToYardEntry(),
+    _id: 'second-pending-dubai-return-yard',
+    tailTrailerNumber: 'TT-101',
+  };
+  const multipleCompletionEvents = [];
+  firstEligibleLegacyDubaiEntry.save = async () => {
+    multipleCompletionEvents.push('first-save');
+  };
+  secondEligibleLegacyDubaiEntry.save = async () => {
+    multipleCompletionEvents.push('second-save');
+  };
+  const nextYardTripAfterMultipleEligibleTrips = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [firstEligibleLegacyDubaiEntry, secondEligibleLegacyDubaiEntry],
+    createImpl: async (payload) => {
+      multipleCompletionEvents.push('create');
+      return { _id: 'created-entry', ...payload };
+    },
+  });
+
+  assert.strictEqual(nextYardTripAfterMultipleEligibleTrips.statusCode, 201);
+  assert.deepStrictEqual(multipleCompletionEvents, ['create', 'first-save', 'second-save']);
+  assert.strictEqual(getWorkflowState(firstEligibleLegacyDubaiEntry).workflowStatus, 'completed');
+  assert.strictEqual(getWorkflowState(secondEligibleLegacyDubaiEntry).workflowStatus, 'completed');
+
+  const pendingDubaiDisplayClearanceEntry = {
+    ...makePendingDubaiReturnToYardEntry(),
+    _id: 'pending-dubai-display-clearance',
+    updates: [
+      ...makePendingDubaiReturnToYardEntry().updates.slice(0, -1),
+      { stop: 'Custom Clearance', status: 'exit', updatedAt: at(7) },
+    ],
+  };
+  pendingDubaiDisplayClearanceEntry.save = async () => {};
+  const nextYardTripAfterDisplayClearance = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [pendingDubaiDisplayClearanceEntry],
+  });
+
+  assert.strictEqual(nextYardTripAfterDisplayClearance.statusCode, 201);
+  assert.strictEqual(getWorkflowState(pendingDubaiDisplayClearanceEntry).workflowStatus, 'completed');
+
+  const pendingDubaiAfterDubaiEntry = {
+    ...makePendingDubaiReturnToYardEntry(),
+    _id: 'pending-dubai-after-dubai-entry',
+    updates: [
+      ...makePendingDubaiReturnToYardEntry().updates,
+      { stop: 'dubai', status: 'entry', updatedAt: at(8) },
+    ],
+  };
+  const duplicateAfterDubaiMovement = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [pendingDubaiAfterDubaiEntry],
+  });
+
+  assert.strictEqual(duplicateAfterDubaiMovement.statusCode, 409);
+  assert.strictEqual(duplicateAfterDubaiMovement.body.message, 'Duplicate active truck entry already exists');
 
   const createFailedPreviousEntry = makePendingDubaiReturnToYardEntry();
   createFailedPreviousEntry.save = async () => {
