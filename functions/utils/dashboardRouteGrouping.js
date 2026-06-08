@@ -16,7 +16,7 @@ const getDashboardRouteKeyForTruckEntry = (truckEntry) => {
   const destination = normalizeDestination(truckEntry.destination);
   const currentStop = normalizeStop(truckEntry.currentStop, destination);
 
-  if (currentStop === 'yard') return 'yardToPortLoading';
+  if (currentStop === 'yard') return destination === 'freezoneDubai' ? 'yardToFreezone' : 'yardToPortLoading';
   if (currentStop === 'port') return destination === 'freezone' ? 'portToFreezone' : 'portToClearence';
 
   if (currentStop === 'clearence') {
@@ -24,7 +24,9 @@ const getDashboardRouteKeyForTruckEntry = (truckEntry) => {
   }
 
   if (currentStop === 'dubai') return 'dubaiToYard';
-  if (currentStop === 'freezone') return 'freezoneToPortLoading';
+  if (currentStop === 'freezone') {
+    return destination === 'freezoneDubai' ? 'freezoneToDubai' : 'freezoneToPortLoading';
+  }
 
   return null;
 };
@@ -33,6 +35,8 @@ const getDashboardRouteLabelsForTruckEntry = (truckEntry) => {
   const routeKey = getDashboardRouteKeyForTruckEntry(truckEntry);
 
   if (routeKey === 'portToFreezone') return { from: 'Port Loading', to: 'Free Zone' };
+  if (routeKey === 'yardToFreezone') return { from: 'Yard', to: 'Free Zone' };
+  if (routeKey === 'freezoneToDubai') return { from: 'Free Zone', to: 'Dubai' };
   if (routeKey === 'clearenceToDubai') return { from: 'Custom Clearence', to: 'Dubai' };
   if (routeKey === 'dubaiToYard') return { from: 'Dubai', to: 'Yard' };
   if (routeKey === 'freezoneToPortLoading') return { from: 'Free Zone', to: 'Port Loading' };

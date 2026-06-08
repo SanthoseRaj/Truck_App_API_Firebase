@@ -82,7 +82,7 @@ const getWorkflowStatus = (truckEntry) => {
       hasUpdate(truckEntry, stop, 'exit')
   );
 
-  if (normalizeDestination(truckEntry.destination) === 'dubai') return 'active';
+  if (['dubai', 'freezoneDubai'].includes(normalizeDestination(truckEntry.destination))) return 'active';
 
   return completed && !isFreeZoneEntryReadyForGateCompletion(truckEntry) ? 'completed' : 'active';
 };
@@ -133,7 +133,7 @@ const getWorkflowState = (truckEntry) => {
     }
   }
 
-  if (normalizeDestination(truckEntry.destination) === 'dubai') {
+  if (['dubai', 'freezoneDubai'].includes(normalizeDestination(truckEntry.destination))) {
     return {
       currentAllowedRole: 'yard',
       currentAllowedStop: 'yard',
@@ -214,10 +214,12 @@ const getActiveMapCount = (counts) => {
     (stops.dubai || 0) +
     (stops.freezone || 0) +
     (routes.yardToPortLoading || 0) +
+    (routes.yardToFreezone || 0) +
     (routes.portToClearence || 0) +
     (routes.portToFreezone || 0) +
     (routes.clearenceToDubai || 0) +
     (routes.clearenceToFreezone || 0) +
+    (routes.freezoneToDubai || 0) +
     (routes.dubaiToYard || 0) +
     (routes.freezoneToPortLoading || 0)
   );
@@ -253,6 +255,15 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     currentStop === 'freezone' &&
     latestStatus === 'exit';
+  const isFreezoneDubaiMoving =
+    workflowStatus !== 'canceled' &&
+    destination === 'freezoneDubai' &&
+    latestStatus === 'exit' &&
+    ['yard', 'freezone'].includes(currentStop);
+  const freezoneDubaiMovement =
+    currentStop === 'yard'
+      ? { from: 'Yard', to: 'Free Zone', movementStatus: 'yardToFreezone' }
+      : { from: 'Free Zone', to: 'Dubai', movementStatus: 'freezoneToDubai' };
   const nextStop =
     ['completed', 'canceled'].includes(workflowStatus)
       ? null
@@ -291,6 +302,11 @@ const serializePublicTruckEntry = (truckEntry, options = {}) => {
           to: 'Port Loading',
           movementStatus: 'freezoneToPort',
         }
+      : isFreezoneDubaiMoving
+        ? {
+            currentLocation: 'Moving',
+            ...freezoneDubaiMovement,
+          }
       : {}),
     updates: getVisibleUpdates(entry).map((update) => {
       const selectedAt = formatSelectedLocalDateTime(update.updatedAt);
@@ -326,10 +342,12 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
     },
     routes: {
       yardToPortLoading: 0,
+      yardToFreezone: 0,
       portToClearence: 0,
       portToFreezone: 0,
       clearenceToDubai: 0,
       clearenceToFreezone: 0,
+      freezoneToDubai: 0,
       dubaiToYard: 0,
       freezoneToPortLoading: 0,
     },

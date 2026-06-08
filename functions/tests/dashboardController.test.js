@@ -35,6 +35,22 @@ const truckEntries = [
     nextStop: null,
   },
   {
+    _id: 'freezone-dubai-after-yard',
+    headTruckNumber: 'HT-FZ-DXB-YARD',
+    destination: 'freezoneDubai',
+    currentStop: 'yard',
+    currentStatus: 'exit',
+    nextStop: 'freezone',
+  },
+  {
+    _id: 'freezone-dubai-after-freezone',
+    headTruckNumber: 'HT-FZ-DXB-FZ',
+    destination: 'freeZoneDubai',
+    currentStop: 'freezone',
+    currentStatus: 'exit',
+    nextStop: 'dubai',
+  },
+  {
     _id: 'canceled-after-clearence',
     headTruckNumber: 'HT-CANCELED',
     destination: 'dubai',
@@ -52,6 +68,8 @@ const clearenceToDubai = routes.find(
 const portToFreeZone = routes.find(
   (route) => route.from === 'Port Loading' && route.to === 'Free Zone'
 );
+const yardToFreeZone = routes.find((route) => route.from === 'Yard' && route.to === 'Free Zone');
+const freeZoneToDubai = routes.find((route) => route.from === 'Free Zone' && route.to === 'Dubai');
 
 assert.strictEqual(clearenceToDubai.count, 1);
 assert.deepStrictEqual(
@@ -66,6 +84,17 @@ assert.deepStrictEqual(
   ['freezone-after-clearence', 'legacy-freezone-after-clearence']
 );
 assert.strictEqual(portToFreeZone.count, portToFreeZone.trucks.length);
+
+assert.strictEqual(yardToFreeZone.count, 1);
+assert.deepStrictEqual(
+  yardToFreeZone.trucks.map((truck) => truck._id),
+  ['freezone-dubai-after-yard']
+);
+assert.strictEqual(freeZoneToDubai.count, 1);
+assert.deepStrictEqual(
+  freeZoneToDubai.trucks.map((truck) => truck._id),
+  ['freezone-dubai-after-freezone']
+);
 
 for (const route of routes) {
   assert.strictEqual(route.count, route.trucks.length);

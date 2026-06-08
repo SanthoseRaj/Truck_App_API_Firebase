@@ -5,6 +5,7 @@ const normalizeDestination = (destination) => {
 
   if (normalized === 'dubai') return 'dubai';
   if (normalized === 'freezone') return 'freezone';
+  if (normalized === 'freezonedubai' || normalized === 'freezoneanddubai') return 'freezoneDubai';
 
   return null;
 };

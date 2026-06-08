@@ -113,7 +113,7 @@ const validateRequiredFields = (body) => {
   }
 
   if (!normalizeDestination(body.destination)) {
-    return 'destination must be either dubai or freezone';
+    return 'destination must be either dubai, freezone, or freezoneDubai';
   }
 
   if (!isValidOriginStop(normalizeOriginStop(body.originStop))) {
@@ -158,6 +158,17 @@ const hasDubaiMovementUpdate = (truckEntry) =>
     return stop === 'dubai' && ['entry', 'exit'].includes(status);
   });
 
+const isMixedDubaiFreeZoneDestination = (truckEntry) => {
+  const destination = normalizeDestination(truckEntry?.destination);
+  if (destination === 'freezoneDubai') return true;
+
+  const rawDestination = truckEntry?.destination;
+  if (rawDestination === undefined || rawDestination === null) return false;
+
+  const normalized = rawDestination.toString().trim().toLowerCase().replace(/[\s_+&/-]+/g, '');
+  return ['dubaifreezone', 'freezonedubai', 'freezoneanddubai'].includes(normalized);
+};
+
 const isDubaiEntryReadyForYardCompletion = (truckEntry) => {
   const latestUpdate = getLatestUpdate(truckEntry);
 
@@ -167,6 +178,20 @@ const isDubaiEntryReadyForYardCompletion = (truckEntry) => {
     !hasCompletedUpdate(truckEntry) &&
     !hasDubaiMovementUpdate(truckEntry) &&
     normalizeStop(latestUpdate?.stop, 'dubai') === 'clearence' &&
+    normalizeText(latestUpdate?.status) === 'exit'
+  );
+};
+
+const isFreezoneDubaiEntryReadyForYardCompletion = (truckEntry) => {
+  const latestUpdate = getLatestUpdate(truckEntry);
+  const destination = normalizeDestination(truckEntry?.destination);
+
+  return (
+    isMixedDubaiFreeZoneDestination(truckEntry) &&
+    !isCanceledTruckEntry(truckEntry) &&
+    !hasCompletedUpdate(truckEntry) &&
+    !hasDubaiMovementUpdate(truckEntry) &&
+    normalizeStop(latestUpdate?.stop, destination) === 'freezone' &&
     normalizeText(latestUpdate?.status) === 'exit'
   );
 };
@@ -237,7 +262,7 @@ const getWorkflowState = (truckEntry) => {
     }
   }
 
-  if (normalizeDestination(truckEntry.destination) === 'dubai') {
+  if (['dubai', 'freezoneDubai'].includes(normalizeDestination(truckEntry.destination))) {
     return {
       currentAllowedRole: 'yard',
       currentAllowedStop: 'yard',
@@ -300,6 +325,15 @@ const serializeTruckEntry = (truckEntry) => {
     isFreeZoneEntryReadyForGateCompletion(entry) &&
     latestStop === 'freezone' &&
     latestStatus === 'exit';
+  const isFreezoneDubaiMoving =
+    workflowState.workflowStatus !== 'canceled' &&
+    destination === 'freezoneDubai' &&
+    latestStatus === 'exit' &&
+    ['yard', 'freezone'].includes(latestStop);
+  const freezoneDubaiMovement =
+    latestStop === 'yard'
+      ? { from: 'Yard', to: 'Free Zone', movementStatus: 'yardToFreezone' }
+      : { from: 'Free Zone', to: 'Dubai', movementStatus: 'freezoneToDubai' };
   const nextStop =
     ['completed', 'canceled'].includes(workflowState.workflowStatus)
       ? null
@@ -331,6 +365,11 @@ const serializeTruckEntry = (truckEntry) => {
           to: 'Port Loading',
           movementStatus: 'freezoneToPort',
         }
+      : isFreezoneDubaiMoving
+        ? {
+            currentLocation: 'Moving',
+            ...freezoneDubaiMovement,
+          }
       : {}),
   };
 };
@@ -365,7 +404,9 @@ const getEntriesForTruck = async (truckId, headTruckNumber, tailTrailerNumber) =
 const getAllowedDubaiYardCompletionEntries = (entries, originStop) => {
   if (originStop !== 'yard') return [];
 
-  return entries.filter(isDubaiEntryReadyForYardCompletion);
+  return entries.filter(
+    (entry) => isDubaiEntryReadyForYardCompletion(entry) || isFreezoneDubaiEntryReadyForYardCompletion(entry)
+  );
 };
 
 const hasOpenTruckEntry = (entries, allowedOpenEntries = []) => {
@@ -429,14 +470,18 @@ const completeLatestDubaiEntryFromYard = async (entries, originStop, user, updat
   if (previousEntries.length === 0) return null;
 
   for (const previousEntry of previousEntries) {
+    const isMixedDubaiFreeZone = isFreezoneDubaiEntryReadyForYardCompletion(previousEntry);
+    const destination = isMixedDubaiFreeZone ? 'freezoneDubai' : normalizeDestination(previousEntry.destination);
     previousEntry.updates.push({
-      stop: 'dubai',
+      stop: isMixedDubaiFreeZone ? 'freezone' : 'dubai',
       status: 'completed',
-      destination: 'dubai',
+      destination,
       updatedAt,
       teamName: getTeamName(user),
       memberName: user.name,
-      remarks: 'Dubai destination trip completed when truck was reassigned from Yard',
+      remarks: isMixedDubaiFreeZone
+        ? 'Dubai Free Zone destination trip completed when truck was reassigned from Yard'
+        : 'Dubai destination trip completed when truck was reassigned from Yard',
     });
 
     if (typeof previousEntry.save === 'function') {
@@ -626,6 +671,10 @@ const validateOriginCycle = (originStop, latestCompletedEntry) => {
     return 'This truck completed Dubai, so the next trip can be added only at Yard';
   }
 
+  if (latestDestination === 'freezoneDubai' && originStop !== 'yard') {
+    return 'This truck completed Free Zone Dubai, so the next trip can be added only at Yard';
+  }
+
   if (latestDestination === 'freezone' && toWorkflowOriginStop(originStop) !== 'port') {
     return 'This truck completed Free Zone, so the next trip can be added only at Port Loading';
   }
@@ -637,14 +686,20 @@ const resolveOriginStopForDestination = (destination, submittedOriginStop) => {
   const normalizedOriginStop = normalizeOriginStop(submittedOriginStop);
 
   if (!normalizeDestination(destination)) {
-    return { error: { status: 400, message: 'destination must be either dubai or freezone' } };
+    return { error: { status: 400, message: 'destination must be either dubai, freezone, or freezoneDubai' } };
   }
 
   if (normalizedOriginStop !== undefined && !isValidOriginStop(normalizedOriginStop)) {
     return { error: { status: 400, message: 'originStop must be either yard or portLoading' } };
   }
 
-  return { originStop: toStoredOriginStop(normalizedOriginStop) || 'yard' };
+  const originStop = toStoredOriginStop(normalizedOriginStop) || 'yard';
+
+  if (normalizeDestination(destination) === 'freezoneDubai' && originStop !== 'yard') {
+    return { error: { status: 400, message: 'freezoneDubai trips can be created only at Yard' } };
+  }
+
+  return { originStop };
 };
 
 const createTruckEntry = async (req, res, next) => {

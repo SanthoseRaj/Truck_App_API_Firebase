@@ -97,6 +97,33 @@ const freeZoneAfterPortExit = {
   destination: 'freezone',
 };
 
+const freezoneDubaiAfterYardExit = {
+  ...baseEntry,
+  destination: 'freeZoneDubai',
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(1) },
+    { stop: 'yard', status: 'exit', updatedAt: at(2) },
+  ],
+};
+
+const freezoneDubaiAfterFreezoneExit = {
+  ...freezoneDubaiAfterYardExit,
+  updates: [
+    ...freezoneDubaiAfterYardExit.updates,
+    { stop: 'freezone', status: 'entry', updatedAt: at(3) },
+    { stop: 'freezone', status: 'exit', updatedAt: at(4) },
+  ],
+};
+
+const freezoneDubaiAfterDubaiExit = {
+  ...freezoneDubaiAfterFreezoneExit,
+  updates: [
+    ...freezoneDubaiAfterFreezoneExit.updates,
+    { stop: 'dubai', status: 'entry', updatedAt: at(5) },
+    { stop: 'dubai', status: 'exit', updatedAt: at(6) },
+  ],
+};
+
 assert.deepStrictEqual(getWorkflowState(yardOrigin), {
   currentAllowedRole: 'yard',
   currentAllowedStop: 'yard',
@@ -142,6 +169,33 @@ assert.deepStrictEqual(getWorkflowState(freeZoneAfterPortExit), {
   nextStop: 'freezone',
 });
 
+assert.deepStrictEqual(getWorkflowState(freezoneDubaiAfterYardExit), {
+  currentAllowedRole: 'freezone',
+  currentAllowedStop: 'freezone',
+  currentAction: 'entry',
+  workflowStatus: 'pending',
+  nextRole: 'freezone',
+  nextStop: 'freezone',
+});
+
+assert.deepStrictEqual(getWorkflowState(freezoneDubaiAfterFreezoneExit), {
+  currentAllowedRole: 'dubai',
+  currentAllowedStop: 'dubai',
+  currentAction: 'entry',
+  workflowStatus: 'pending',
+  nextRole: 'dubai',
+  nextStop: 'dubai',
+});
+
+assert.deepStrictEqual(getWorkflowState(freezoneDubaiAfterDubaiExit), {
+  currentAllowedRole: 'yard',
+  currentAllowedStop: 'yard',
+  currentAction: null,
+  workflowStatus: 'pending',
+  nextRole: 'yard',
+  nextStop: 'yard',
+});
+
 assert.deepStrictEqual(getWorkflowState(completedGateOrigin), {
   currentAllowedRole: 'port',
   currentAllowedStop: 'port',
@@ -169,9 +223,25 @@ const serializedAfterFreeZoneCustomClearenceExit = serializeTruckEntry({
   destination: 'freezone',
 });
 const serializedAfterFreeZoneExit = serializeTruckEntry(completedGateOrigin);
+const serializedFreezoneDubaiAfterYardExit = serializeTruckEntry(freezoneDubaiAfterYardExit);
+const serializedFreezoneDubaiAfterFreezoneExit = serializeTruckEntry(freezoneDubaiAfterFreezoneExit);
+const serializedFreezoneDubaiAfterDubaiExit = serializeTruckEntry(freezoneDubaiAfterDubaiExit);
 
 assert.strictEqual(serializedGateOrigin.destination, 'freezone');
 assert.strictEqual(serializedLegacyFreeZone.destination, 'freezone');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.destination, 'freezoneDubai');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.dubaiFreeZoneDestination, 'freezoneDubai');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.nextStop, 'freezone');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.movementStatus, 'yardToFreezone');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.from, 'Yard');
+assert.strictEqual(serializedFreezoneDubaiAfterYardExit.to, 'Free Zone');
+assert.strictEqual(serializedFreezoneDubaiAfterFreezoneExit.nextStop, 'dubai');
+assert.strictEqual(serializedFreezoneDubaiAfterFreezoneExit.movementStatus, 'freezoneToDubai');
+assert.strictEqual(serializedFreezoneDubaiAfterFreezoneExit.from, 'Free Zone');
+assert.strictEqual(serializedFreezoneDubaiAfterFreezoneExit.to, 'Dubai');
+assert.strictEqual(serializedFreezoneDubaiAfterDubaiExit.workflowStatus, 'pending');
+assert.strictEqual(serializedFreezoneDubaiAfterDubaiExit.currentAllowedRole, 'yard');
+assert.strictEqual(serializedFreezoneDubaiAfterDubaiExit.nextStop, null);
 assert.strictEqual(serializedGateOrigin.truckModel, '6 Wheel');
 assert.strictEqual(serializedGateOrigin.originStop, 'portLoading');
 assert.strictEqual(serializedGateOrigin.currentStop, 'portLoading');
@@ -273,6 +343,12 @@ assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: 'Free Zone' 
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, { destination: 'freeZone' }), {
   destination: 'freezone',
 });
+assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, { destination: 'freeZoneDubai' }), {
+  destination: 'freezoneDubai',
+});
+assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, { destination: 'freezoneanddubai' }), {
+  destination: 'freezoneDubai',
+});
 assert.deepStrictEqual(resolveEntryDestinationUpdate({ destination: undefined }, {}), {
   error: { status: 400, message: 'Dubai or Free Zone destination is required' },
 });
@@ -300,6 +376,15 @@ assert.deepStrictEqual(resolveOriginStopForDestination('dubai', 'gate'), {
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('freeZone', 'YARD'), {
   originStop: 'yard',
+});
+assert.deepStrictEqual(resolveOriginStopForDestination('freeZoneDubai', 'yard'), {
+  originStop: 'yard',
+});
+assert.deepStrictEqual(resolveOriginStopForDestination('freezoneanddubai', undefined), {
+  originStop: 'yard',
+});
+assert.deepStrictEqual(resolveOriginStopForDestination('freezoneDubai', 'gate'), {
+  error: { status: 400, message: 'freezoneDubai trips can be created only at Yard' },
 });
 assert.deepStrictEqual(resolveOriginStopForDestination('FREE_ZONE', 'Gate'), {
   originStop: 'portLoading',
@@ -359,6 +444,18 @@ const makePendingDubaiReturnToYardEntry = () => ({
     { stop: 'port', status: 'entry', updatedAt: at(4) },
     { stop: 'port', status: 'exit', updatedAt: at(5) },
     { stop: 'clearence', status: 'exit', updatedAt: at(7) },
+  ],
+});
+
+const makePendingFreezoneDubaiReturnToYardEntry = () => ({
+  ...baseEntry,
+  _id: 'pending-freezone-dubai-return-yard',
+  destination: 'DubaiFreeZone',
+  updates: [
+    { stop: 'yard', status: 'entry', updatedAt: at(0) },
+    { stop: 'yard', status: 'exit', updatedAt: at(1) },
+    { stop: 'freezone', status: 'entry', updatedAt: at(2) },
+    { stop: 'freezone', status: 'exit', updatedAt: at(3) },
   ],
 });
 
@@ -835,6 +932,103 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
     true
   );
   assert.strictEqual(getWorkflowState(pendingDubaiPreviousEntry).workflowStatus, 'completed');
+
+  const pendingFreezoneDubaiPreviousEntry = makePendingFreezoneDubaiReturnToYardEntry();
+  const freezoneDubaiCompletionEvents = [];
+  pendingFreezoneDubaiPreviousEntry.save = async () => {
+    freezoneDubaiCompletionEvents.push('save');
+  };
+  const nextYardTripAfterFreezoneDubai = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'freezoneDubai', originStop: 'yard' }),
+    entries: [pendingFreezoneDubaiPreviousEntry],
+    createImpl: async (payload) => {
+      freezoneDubaiCompletionEvents.push('create');
+      return { _id: 'created-freezone-dubai-entry', ...payload };
+    },
+  });
+
+  assert.strictEqual(nextYardTripAfterFreezoneDubai.statusCode, 201);
+  assert.strictEqual(nextYardTripAfterFreezoneDubai.body.truckEntry.destination, 'freezoneDubai');
+  assert.deepStrictEqual(freezoneDubaiCompletionEvents, ['create', 'save']);
+  assert.strictEqual(getWorkflowState(pendingFreezoneDubaiPreviousEntry).workflowStatus, 'completed');
+  assert.strictEqual(
+    serializeTruckEntry(pendingFreezoneDubaiPreviousEntry).updates.some(
+      (update) =>
+        update.stop === 'freezone' &&
+        update.status === 'completed' &&
+        update.destination === 'freezoneDubai' &&
+        update.remarks === 'Dubai Free Zone destination trip completed when truck was reassigned from Yard'
+    ),
+    true
+  );
+
+  const pendingFreezoneDubaiNotAtFreezoneExit = {
+    ...makePendingFreezoneDubaiReturnToYardEntry(),
+    _id: 'pending-freezone-dubai-not-ready',
+    updates: [
+      { stop: 'yard', status: 'entry', updatedAt: at(0) },
+      { stop: 'yard', status: 'exit', updatedAt: at(1) },
+      { stop: 'freezone', status: 'entry', updatedAt: at(2) },
+    ],
+  };
+  const duplicateBeforeFreezoneExit = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [pendingFreezoneDubaiNotAtFreezoneExit],
+  });
+
+  assert.strictEqual(duplicateBeforeFreezoneExit.statusCode, 409);
+  assert.strictEqual(duplicateBeforeFreezoneExit.body.message, 'Duplicate active truck entry already exists');
+  assert.strictEqual(
+    pendingFreezoneDubaiNotAtFreezoneExit.updates.some(
+      (update) => update.status === 'completed' && update.remarks === 'Dubai Free Zone destination trip completed when truck was reassigned from Yard'
+    ),
+    false
+  );
+
+  const normalFreezoneAfterFreezoneExit = {
+    ...makePendingFreezoneDubaiReturnToYardEntry(),
+    _id: 'normal-freezone-after-freezone-exit',
+    destination: 'freezone',
+  };
+  const duplicateNormalFreezoneAfterFreezoneExit = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [normalFreezoneAfterFreezoneExit],
+  });
+
+  assert.strictEqual(duplicateNormalFreezoneAfterFreezoneExit.statusCode, 409);
+  assert.strictEqual(duplicateNormalFreezoneAfterFreezoneExit.body.message, 'Duplicate active truck entry already exists');
+  assert.strictEqual(
+    normalFreezoneAfterFreezoneExit.updates.some(
+      (update) => update.status === 'completed' && update.remarks === 'Dubai Free Zone destination trip completed when truck was reassigned from Yard'
+    ),
+    false
+  );
+
+  const canceledFreezoneDubaiPreviousEntry = {
+    ...makePendingFreezoneDubaiReturnToYardEntry(),
+    _id: 'canceled-freezone-dubai-return-yard',
+    workflowStatus: 'canceled',
+    currentStatus: 'canceled',
+    updates: [
+      ...makePendingFreezoneDubaiReturnToYardEntry().updates,
+      { stop: 'freezone', status: 'canceled', updatedAt: at(4) },
+    ],
+    save: async () => {
+      throw new Error('canceled mixed trip should not be completed');
+    },
+  };
+  const nextYardTripAfterCanceledFreezoneDubai = await callCreateTruckEntry({
+    body: makeCreateBody({ destination: 'dubai', originStop: 'yard' }),
+    entries: [canceledFreezoneDubaiPreviousEntry],
+  });
+
+  assert.strictEqual(nextYardTripAfterCanceledFreezoneDubai.statusCode, 201);
+  assert.strictEqual(
+    canceledFreezoneDubaiPreviousEntry.updates.some(
+      (update) => update.status === 'completed' && update.remarks === 'Dubai Free Zone destination trip completed when truck was reassigned from Yard'
+    ),
+    false
+  );
 
   const firstEligibleLegacyDubaiEntry = makePendingDubaiReturnToYardEntry();
   const secondEligibleLegacyDubaiEntry = {

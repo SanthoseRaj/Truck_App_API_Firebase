@@ -24,8 +24,10 @@ const ROUTE_MARKERS = [
 
 const ROUTE_LINES = [
   { from: 'Yard', to: 'Port Loading' },
+  { from: 'Yard', to: 'Free Zone' },
   { from: 'Port Loading', to: 'Custom Clearence' },
   { from: 'Port Loading', to: 'Free Zone' },
+  { from: 'Free Zone', to: 'Dubai' },
   { from: 'Custom Clearence', to: 'Dubai' },
 ];
 

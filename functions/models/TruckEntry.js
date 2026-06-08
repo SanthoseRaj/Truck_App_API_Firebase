@@ -13,7 +13,7 @@ const truckEntryUpdateSchema = new mongoose.Schema(
     },
     destination: {
       type: String,
-      enum: ['dubai', 'freezone', 'freeZone'],
+      enum: ['dubai', 'freezone', 'freeZone', 'freezoneDubai'],
       trim: true,
     },
     updatedAt: {
@@ -118,7 +118,7 @@ const truckEntrySchema = new mongoose.Schema(
     },
     destination: {
       type: String,
-      enum: ['dubai', 'freezone', 'freeZone'],
+      enum: ['dubai', 'freezone', 'freeZone', 'freezoneDubai'],
       trim: true,
     },
     originStop: {
