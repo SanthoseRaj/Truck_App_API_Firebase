@@ -106,6 +106,7 @@ const callUpdateTruck = async (truckModel, bodyOverrides = {}, supplier = null) 
     ['2 Axle', '2 Axle'],
     ['3 Axle', '3 Axle'],
     ['6 Wheel', '6 Wheel'],
+    ['Flat Trailer', 'Flat Trailer'],
   ];
 
   for (const [submitted, expected] of acceptedModels) {
@@ -160,7 +161,7 @@ const callUpdateTruck = async (truckModel, bodyOverrides = {}, supplier = null) 
 
   assert.strictEqual(
     validateTruckInput(makeCreateBody('fiveAxis'), { requireAll: true }),
-    'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel'
+    'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer'
   );
 
   console.log('truck controller tests passed');

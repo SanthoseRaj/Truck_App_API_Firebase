@@ -1,4 +1,4 @@
-const TRUCK_MODEL_DISPLAY_VALUES = ['2 Axle', '3 Axle', '6 Wheel'];
+const TRUCK_MODEL_DISPLAY_VALUES = ['2 Axle', '3 Axle', '6 Wheel', 'Flat Trailer'];
 
 const legacyTruckModelMap = {
   threeAxis: '2 Axle',

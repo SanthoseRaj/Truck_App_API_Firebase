@@ -4,7 +4,7 @@ const TruckEntry = require('../models/TruckEntry');
 const Supplier = require('../models/Supplier');
 const { normalizeTruckModel } = require('../utils/truckModel');
 
-const TRUCK_MODEL_ERROR = 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel';
+const TRUCK_MODEL_ERROR = 'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer';
 
 const normalizeUpper = (value) => (value || '').trim().toUpperCase();
 const trimString = (value) => (typeof value === 'string' ? value.trim() : value);

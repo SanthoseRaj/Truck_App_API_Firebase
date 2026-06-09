@@ -109,7 +109,7 @@ const validateRequiredFields = (body) => {
   }
 
   if (!normalizeTruckModel(body.truckModel)) {
-    return 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel';
+    return 'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer';
   }
 
   if (!normalizeDestination(body.destination)) {
@@ -554,7 +554,7 @@ const applyFinishTripUpdates = async (truckEntry, updates = {}, session = null) 
     truckEntry[field] = field === 'truckModel' ? normalizeTruckModel(updates[field]) : updates[field].trim();
 
     if (field === 'truckModel' && !truckEntry[field]) {
-      return { error: { status: 400, message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel' } };
+      return { error: { status: 400, message: 'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer' } };
     }
   }
 

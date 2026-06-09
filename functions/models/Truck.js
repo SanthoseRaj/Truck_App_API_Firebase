@@ -21,7 +21,7 @@ const truckSchema = new mongoose.Schema(
       required: [true, 'Truck model is required'],
       enum: {
         values: TRUCK_MODEL_DISPLAY_VALUES,
-        message: 'truckModel must be one of 2 Axle, 3 Axle, or 6 Wheel',
+        message: 'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer',
       },
     },
     supplierId: {

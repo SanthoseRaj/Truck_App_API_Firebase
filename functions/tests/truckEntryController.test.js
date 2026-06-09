@@ -1269,7 +1269,7 @@ const callMarkGateReturnEntry = async ({ entry, existingEntries = null, nextTrip
     remarks: 'Customer request',
   });
 
-  for (const truckModel of ['2 Axle', '3 Axle', '6 Wheel']) {
+  for (const truckModel of ['2 Axle', '3 Axle', '6 Wheel', 'Flat Trailer']) {
     let createdPayload = null;
     const createdEntry = await callCreateTruckEntry({
       body: makeCreateBody({ truckModel }),
