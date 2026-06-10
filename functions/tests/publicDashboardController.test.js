@@ -74,6 +74,15 @@ const publicEntries = [
   ),
 ];
 
+assert.deepStrictEqual(
+  serializePublicTruckEntry({ toObject: () => makeEntry('entry-doc', 'HT-100', 'TT-100', [
+    { stop: 'yard', status: 'entry', updatedAt: at(1), teamName: 'Yard Team', memberName: 'Yard Member' },
+  ]) }),
+  serializePublicTruckEntry(makeEntry('entry-doc', 'HT-100', 'TT-100', [
+    { stop: 'yard', status: 'entry', updatedAt: at(1), teamName: 'Yard Team', memberName: 'Yard Member' },
+  ]))
+);
+
 const counts = buildDashboardCounts(publicEntries);
 const canceledPublicEntry = serializePublicTruckEntry({
   ...baseEntry,

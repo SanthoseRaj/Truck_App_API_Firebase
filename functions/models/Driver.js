@@ -28,5 +28,6 @@ const driverSchema = new mongoose.Schema(
 driverSchema.index({ mobileNumber: 1 }, { unique: true });
 driverSchema.index({ idNumber: 1 }, { unique: true });
 driverSchema.index({ driverName: 1 });
+driverSchema.index({ isActive: 1, driverName: 1 });
 
 module.exports = mongoose.model('Driver', driverSchema);

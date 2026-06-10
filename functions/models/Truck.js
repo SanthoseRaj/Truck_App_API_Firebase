@@ -47,4 +47,7 @@ const truckSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+truckSchema.index({ isActive: 1, headTruckNumber: 1 });
+truckSchema.index({ supplierId: 1 });
+
 module.exports = mongoose.model('Truck', truckSchema);

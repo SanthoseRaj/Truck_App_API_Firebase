@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Ship = require('../models/Ship');
+const { applyOptionalPagination, logApiTiming, timed, timedSync } = require('../utils/apiPerformance');
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const REQUIRED_SHIP_FIELDS = [
@@ -129,8 +130,14 @@ const createShip = async (req, res, next) => {
 
 const getShips = async (req, res, next) => {
   try {
-    const ships = await Ship.find().sort('-createdAt');
-    return res.status(200).json({ ships: ships.map(serializeShip) });
+    const timings = {};
+    const ships = await timed('db', timings, () =>
+      applyOptionalPagination(Ship.find().sort('-createdAt').lean(), req.query)
+    );
+    const payload = timedSync('serialization', timings, () => ({ ships: ships.map(serializeShip) }));
+    logApiTiming(req, timings, payload);
+
+    return res.status(200).json(payload);
   } catch (error) {
     next(error);
   }

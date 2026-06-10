@@ -6,6 +6,7 @@ const {
   deleteDriver: deleteDriverRecord,
   getDuplicateDriverMessage,
 } = require('../services/driverService');
+const { logApiTiming } = require('../utils/apiPerformance');
 
 const createDriver = async (req, res, next) => {
   try {
@@ -22,10 +23,14 @@ const createDriver = async (req, res, next) => {
 
 const getDrivers = async (req, res, next) => {
   try {
-    const result = await listDrivers(req.query);
+    const timings = {};
+    const result = await listDrivers(req.query, { timings });
     if (result.error) return res.status(400).json({ success: false, message: result.error });
 
-    return res.json({ success: true, data: result.drivers });
+    const payload = { success: true, data: result.drivers };
+    logApiTiming(req, timings, payload);
+
+    return res.json(payload);
   } catch (error) {
     next(error);
   }

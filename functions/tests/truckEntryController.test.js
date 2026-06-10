@@ -218,6 +218,11 @@ const serializedGateOrigin = serializeTruckEntry(gateOrigin);
 const serializedLegacyFreeZone = serializeTruckEntry({ ...gateOrigin, destination: 'Free Zone' });
 const serializedWaitingAtCustomClearence = serializeTruckEntry(waitingAtCustomClearence);
 const serializedFreeZoneAfterPortExit = serializeTruckEntry(freeZoneAfterPortExit);
+
+assert.deepStrictEqual(
+  serializeTruckEntry({ toObject: () => gateOrigin }),
+  serializeTruckEntry(gateOrigin)
+);
 const serializedAfterFreeZoneCustomClearenceExit = serializeTruckEntry({
   ...afterCustomClearenceExit,
   destination: 'freezone',

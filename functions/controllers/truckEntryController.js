@@ -19,6 +19,7 @@ const {
   selectedLocalDateTimeFromDate,
 } = require('../utils/selectedLocalDateTime');
 const { buildDashboardCounts } = require('./publicDashboardController');
+const { applyOptionalPagination, logApiTiming, timed, timedSync } = require('../utils/apiPerformance');
 
 const requiredFields = [
   'truckId',
@@ -817,11 +818,21 @@ const createTruckEntry = async (req, res, next) => {
 
 const getTruckEntries = async (req, res, next) => {
   try {
-    const truckEntries = await TruckEntry.find().populate('shipId', 'shipName shipNumber').sort('-createdAt');
-    const serializedTruckEntries = truckEntries.map(serializeTruckEntry);
-    const counts = buildDashboardCounts(serializedTruckEntries);
+    const timings = {};
+    const truckEntries = await timed('db', timings, () =>
+      applyOptionalPagination(TruckEntry.find().sort('-createdAt').lean(), req.query)
+    );
+    const { serializedTruckEntries, counts } = timedSync('serialization', timings, () => {
+      const entries = truckEntries.map(serializeTruckEntry);
+      return {
+        serializedTruckEntries: entries,
+        counts: buildDashboardCounts(entries),
+      };
+    });
+    const payload = { counts, truckEntries: serializedTruckEntries };
+    logApiTiming(req, timings, payload);
 
-    return res.status(200).json({ counts, truckEntries: serializedTruckEntries });
+    return res.status(200).json(payload);
   } catch (error) {
     next(error);
   }

@@ -178,4 +178,12 @@ const truckEntrySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+truckEntrySchema.index({ createdAt: -1 });
+truckEntrySchema.index({ isDeleted: 1, deletedAt: 1, workflowStatus: 1, currentStatus: 1, createdAt: -1 });
+truckEntrySchema.index({ 'updates.updatedAt': 1, createdAt: -1 });
+truckEntrySchema.index({ truckId: 1, createdAt: -1 });
+truckEntrySchema.index({ headTruckNumber: 1, tailTrailerNumber: 1, createdAt: -1 });
+truckEntrySchema.index({ shipId: 1 });
+truckEntrySchema.index({ supplierId: 1 });
+
 module.exports = mongoose.model('TruckEntry', truckEntrySchema);

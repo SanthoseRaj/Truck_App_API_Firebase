@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Supplier = require('../models/Supplier');
+const { applyOptionalPagination, timed, timedSync } = require('../utils/apiPerformance');
 
 const managerRoles = ['owner', 'admin'];
 const REQUIRED_SUPPLIER_FIELDS = [
@@ -64,12 +65,16 @@ const buildSupplierListQuery = (queryParams = {}, user = {}) => {
   return { query };
 };
 
-const listSuppliers = async (queryParams, user) => {
+const listSuppliers = async (queryParams, user, options = {}) => {
   const { query, error } = buildSupplierListQuery(queryParams, user);
   if (error) return { error, statusCode: 400 };
 
-  const suppliers = await Supplier.find(query).sort({ supplierName: 1 });
-  return { suppliers: suppliers.map(serializeSupplier) };
+  const suppliers = await timed('db', options.timings || {}, () =>
+    applyOptionalPagination(Supplier.find(query).sort({ supplierName: 1 }).lean(), queryParams)
+  );
+  return {
+    suppliers: timedSync('serialization', options.timings || {}, () => suppliers.map(serializeSupplier)),
+  };
 };
 
 const createSupplier = async (body = {}) => {

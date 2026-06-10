@@ -11,6 +11,14 @@ const {
 const { formatSelectedLocalDateTime } = require('../utils/selectedLocalDateTime');
 const { getDashboardCountRouteKeyForTruckEntry } = require('../utils/dashboardRouteGrouping');
 const { normalizeTruckModel } = require('../utils/truckModel');
+const {
+  applyOptionalPagination,
+  createWeakEtag,
+  getLatestTimestamp,
+  logApiTiming,
+  timed,
+  timedSync,
+} = require('../utils/apiPerformance');
 
 const dashboardDatePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -430,6 +438,7 @@ const buildDashboardCounts = (truckEntries, options = {}) => {
 
 const getPublicDashboardTruckEntries = async (req, res, next) => {
   try {
+    const timings = {};
     const query = {
       isDeleted: { $ne: true },
       workflowStatus: { $ne: 'canceled' },
@@ -448,27 +457,57 @@ const getPublicDashboardTruckEntries = async (req, res, next) => {
       query.$and = [dateFilter];
     }
 
-    const truckEntries = await TruckEntry.find(query).sort('-createdAt');
-    const ships = await Ship.find().sort('-createdAt');
-    const dateRange = req.query?.date !== undefined ? getDashboardDateRange(req.query.date) : null;
-    const filteredTruckEntries =
-      req.query?.date !== undefined ? filterDashboardTruckEntriesByDate(truckEntries, req.query.date) : truckEntries;
-    const publicTruckEntries = filteredTruckEntries.map((truckEntry) =>
-      serializePublicTruckEntry(truckEntry, dateRange ? { dateRange } : {})
+    const [truckEntries, ships] = await timed('db', timings, () =>
+      Promise.all([
+        applyOptionalPagination(TruckEntry.find(query).sort('-createdAt').lean(), req.query),
+        Ship.find().sort('-createdAt').select('shipName createdAt updatedAt').lean(),
+      ])
     );
-    const counts = buildDashboardCounts(publicTruckEntries, { dateScoped: Boolean(dateRange) });
+    const dateRange = req.query?.date !== undefined ? getDashboardDateRange(req.query.date) : null;
+    const { publicTruckEntries, counts } = timedSync('serialization', timings, () => {
+      const filteredTruckEntries =
+        req.query?.date !== undefined ? filterDashboardTruckEntriesByDate(truckEntries, req.query.date) : truckEntries;
+      const serializedTruckEntries = filteredTruckEntries.map((truckEntry) =>
+        serializePublicTruckEntry(truckEntry, dateRange ? { dateRange } : {})
+      );
+
+      return {
+        publicTruckEntries: serializedTruckEntries,
+        counts: buildDashboardCounts(serializedTruckEntries, { dateScoped: Boolean(dateRange) }),
+      };
+    });
 
     console.log(
       `[public-dashboard] entries=${publicTruckEntries.length} active=${counts.totalActive} moving=${counts.moving}`
     );
 
-    res.set('Cache-Control', 'no-store');
-
-    return res.status(200).json({
+    const payload = {
       counts,
       shipNames: ships.map((ship) => ship.shipName),
       truckEntries: publicTruckEntries,
-    });
+    };
+    const latestModified = getLatestTimestamp([...truckEntries, ...ships]);
+    const etag = createWeakEtag(payload);
+    logApiTiming(req, timings, payload);
+
+    res.set('Cache-Control', 'public, max-age=0, must-revalidate');
+    res.set('ETag', etag);
+    if (latestModified) res.set('Last-Modified', latestModified.toUTCString());
+
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
+    }
+
+    const ifModifiedSince = req.headers['if-modified-since'];
+    if (
+      latestModified &&
+      ifModifiedSince &&
+      Math.floor(new Date(ifModifiedSince).getTime() / 1000) >= Math.floor(latestModified.getTime() / 1000)
+    ) {
+      return res.status(304).end();
+    }
+
+    return res.status(200).json(payload);
   } catch (error) {
     next(error);
   }

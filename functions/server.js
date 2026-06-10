@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const morgan = require('morgan');
 const swaggerUi = require('swagger-ui-express');
 
@@ -28,6 +29,7 @@ const PORT = process.env.PORT || 5000;
 
 app.set('etag', false);
 app.use(cors());
+app.use(compression({ brotli: { enabled: true } }));
 app.use(express.json());
 app.use(morgan('dev'));
 

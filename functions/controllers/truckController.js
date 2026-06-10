@@ -3,6 +3,7 @@ const Truck = require('../models/Truck');
 const TruckEntry = require('../models/TruckEntry');
 const Supplier = require('../models/Supplier');
 const { normalizeTruckModel } = require('../utils/truckModel');
+const { applyOptionalPagination, logApiTiming, timed, timedSync } = require('../utils/apiPerformance');
 
 const TRUCK_MODEL_ERROR = 'truckModel must be one of 2 Axle, 3 Axle, 6 Wheel, or Flat Trailer';
 
@@ -135,12 +136,17 @@ const createTruck = async (req, res, next) => {
 
 const getTrucks = async (req, res, next) => {
   try {
+    const timings = {};
     const isManager = ['owner', 'admin', 'yard', 'gate', 'port'].includes(req.user.role);
     const includeInactive = isManager && req.query.includeInactive === 'true';
     const filter = includeInactive ? {} : { isActive: true };
-    const trucks = await Truck.find(filter).sort('headTruckNumber');
+    const trucks = await timed('db', timings, () =>
+      applyOptionalPagination(Truck.find(filter).sort('headTruckNumber').lean(), req.query)
+    );
+    const payload = timedSync('serialization', timings, () => ({ trucks: trucks.map(serializeTruck) }));
+    logApiTiming(req, timings, payload);
 
-    return res.status(200).json({ trucks: trucks.map(serializeTruck) });
+    return res.status(200).json(payload);
   } catch (error) {
     next(error);
   }

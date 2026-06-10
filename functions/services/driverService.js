@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Driver = require('../models/Driver');
+const { applyOptionalPagination, timed, timedSync } = require('../utils/apiPerformance');
 
 const REQUIRED_DRIVER_FIELDS = [
   ['driverName', 'Driver name is required'],
@@ -92,17 +93,21 @@ const ensureUniqueDriverFields = async ({ mobileNumber, idNumber }, excludedDriv
   return duplicateMessages.find(Boolean) || null;
 };
 
-const listDrivers = async (queryParams) => {
+const listDrivers = async (queryParams, options = {}) => {
   const { query, error } = buildDriverListQuery(queryParams);
   if (error) return { error };
 
-  const drivers = await Driver.find(query).sort({ driverName: 1 });
-  return { drivers: drivers.map(serializeDriver) };
+  const drivers = await timed('db', options.timings || {}, () =>
+    applyOptionalPagination(Driver.find(query).sort({ driverName: 1 }).lean(), queryParams)
+  );
+  return {
+    drivers: timedSync('serialization', options.timings || {}, () => drivers.map(serializeDriver)),
+  };
 };
 
 const getDriverById = async (id) => {
   if (!mongoose.isValidObjectId(id)) return null;
-  const driver = await Driver.findById(id);
+  const driver = await Driver.findById(id).lean();
   return driver ? serializeDriver(driver) : null;
 };
 

@@ -43,4 +43,8 @@ const shipSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+shipSchema.index({ createdAt: -1 });
+shipSchema.index({ shipNumber: 1 }, { unique: true, sparse: true });
+shipSchema.index({ isActive: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Ship', shipSchema);
